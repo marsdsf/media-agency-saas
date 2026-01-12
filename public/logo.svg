@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B5CF6"/>
+      <stop offset="50%" style="stop-color:#A855F7"/>
+      <stop offset="100%" style="stop-color:#D946EF"/>
+    </linearGradient>
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#06B6D4"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background Circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#gradient1)"/>
+  
+  <!-- M Letter stylized - white -->
+  <path d="M22 72 L22 32 L36 56 L50 32 L64 56 L78 32 L78 72" 
+        fill="none" 
+        stroke="#ffffff" 
+        stroke-width="7" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- AI Sparkle/Star -->
+  <g transform="translate(75, 22)">
+    <path d="M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z" 
+          fill="#ffffff"/>
+  </g>
+  
+  <!-- Smaller sparkle -->
+  <g transform="translate(88, 38)">
+    <path d="M0 -5 L1.25 -1.25 L5 0 L1.25 1.25 L0 5 L-1.25 1.25 L-5 0 L-1.25 -1.25 Z" 
+          fill="#ffffff" 
+          opacity="0.8"/>
+  </g>
+</svg>
