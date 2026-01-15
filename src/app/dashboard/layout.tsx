@@ -33,23 +33,31 @@ import {
   Link2,
   Megaphone,
   UsersRound,
-  Music
+  Music,
+  Sparkles,
+  CheckCircle,
+  Eye
 } from 'lucide-react';
 import { Button, Avatar, Badge } from '@/lib/ui';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Clientes', href: '/dashboard/clients', icon: Users, badge: 'Novo' },
   { name: 'Agendador', href: '/dashboard/scheduler', icon: Calendar },
-  { name: 'Calendário', href: '/dashboard/calendar', icon: CalendarDays, badge: 'Novo' },
-  { name: 'TikTok Studio', href: '/dashboard/tiktok', icon: Music, badge: 'Novo' },
+  { name: 'Calendário', href: '/dashboard/calendar', icon: CalendarDays },
+  { name: 'TikTok Studio', href: '/dashboard/tiktok', icon: Music },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Relatórios', href: '/dashboard/reports', icon: FileBarChart },
+  { name: 'Gerar PDF', href: '/dashboard/report-generator', icon: FileText, badge: 'Pro' },
+  { name: 'Previsão IA', href: '/dashboard/predict', icon: Sparkles, badge: 'IA' },
+  { name: 'Aprovações', href: '/dashboard/approvals', icon: CheckCircle, badge: 'Novo' },
+  { name: 'Automações', href: '/dashboard/automations', icon: Zap },
+  { name: 'Concorrência', href: '/dashboard/competitors', icon: Eye },
   { name: 'Templates', href: '/dashboard/templates', icon: FileText },
   { name: 'Biblioteca', href: '/dashboard/media', icon: Image },
   { name: 'Hashtags', href: '/dashboard/hashtags', icon: Hash },
   { name: 'Brand Kit', href: '/dashboard/brand', icon: Palette },
   { name: 'Tendências', href: '/dashboard/trends', icon: TrendingUp },
-  { name: 'Concorrência', href: '/dashboard/competitors', icon: Users },
   { name: 'Inbox', href: '/dashboard/inbox', icon: MessageCircle },
   { name: 'Influenciadores', href: '/dashboard/influencers', icon: UserPlus },
   { name: 'Link in Bio', href: '/dashboard/links', icon: Link2 },

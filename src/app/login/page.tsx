@@ -23,8 +23,11 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push('/dashboard');
-    } catch {
-      setError('Email ou senha incorretos');
+    } catch (err: any) {
+      console.error('Login error:', err);
+      // Mostrar mensagem detalhada para debug
+      const errorMsg = err.message || 'Email ou senha incorretos';
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }

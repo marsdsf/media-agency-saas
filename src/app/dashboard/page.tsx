@@ -1,27 +1,76 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Calendar, 
-  TrendingUp, 
-  Clock, 
+import {
+  Calendar,
+  TrendingUp,
+  Clock,
   CheckCircle,
   Plus,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Users,
+  Building2,
+  ChevronDown,
+  FileText,
+  BarChart3,
+  Zap
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
 import { usePostsStore } from '@/lib/store';
 
+// Mock clients for selector
+const mockClients = [
+  { id: 'all', name: 'Todos os Clientes', logo: '📊' },
+  { id: '1', name: 'Fashion Style', logo: 'FS' },
+  { id: '2', name: 'Café Aroma', logo: 'CA' },
+  { id: '3', name: 'Tech Solutions', logo: 'TS' },
+];
+
+// Mock agency stats
+const agencyStats = {
+  totalClients: 12,
+  totalPosts: 156,
+  pendingApproval: 8,
+  publishedThisWeek: 34,
+  aiCreditsUsed: 4250,
+  aiCreditsLimit: 10000,
+};
+
 export default function DashboardPage() {
   const { posts } = usePostsStore();
+  const [isWelcome, setIsWelcome] = useState(false);
+  const [selectedClient, setSelectedClient] = useState('all');
+  const [showClientSelector, setShowClientSelector] = useState(false);
 
-  const stats = [
-    { label: 'Posts Agendados', value: posts.filter(p => p.status === 'scheduled').length, icon: Calendar, gradient: 'from-gray-600 to-gray-800' },
-    { label: 'Publicados Hoje', value: 0, icon: CheckCircle, gradient: 'from-gray-500 to-gray-700' },
-    { label: 'Rascunhos', value: posts.filter(p => p.status === 'draft').length, icon: Clock, gradient: 'from-gray-600 to-gray-800' },
-    { label: 'Engajamento', value: '+24%', icon: TrendingUp, gradient: 'from-white to-gray-200' },
-  ];
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsWelcome(params.get('welcome') === 'true');
+  }, []);
+
+  const currentClient = mockClients.find(c => c.id === selectedClient);
+
+  const stats = selectedClient === 'all'
+    ? [
+        { label: 'Clientes Ativos', value: agencyStats.totalClients, icon: Building2, color: 'violet' },
+        { label: 'Posts Este Mês', value: agencyStats.totalPosts, icon: FileText, color: 'blue' },
+        { label: 'Aguardando Aprovação', value: agencyStats.pendingApproval, icon: Clock, color: 'yellow' },
+        { label: 'Publicados na Semana', value: agencyStats.publishedThisWeek, icon: CheckCircle, color: 'green' },
+      ]
+    : [
+        { label: 'Posts Agendados', value: posts.filter(p => p.status === 'scheduled').length, icon: Calendar, color: 'violet' },
+        { label: 'Publicados Hoje', value: 0, icon: CheckCircle, color: 'green' },
+        { label: 'Rascunhos', value: posts.filter(p => p.status === 'draft').length, icon: Clock, color: 'yellow' },
+        { label: 'Engajamento', value: '+24%', icon: TrendingUp, color: 'blue' },
+      ];
+
+  const colorClasses = {
+    violet: 'bg-violet-500/10 text-violet-400',
+    blue: 'bg-blue-500/10 text-blue-400',
+    yellow: 'bg-yellow-500/10 text-yellow-400',
+    green: 'bg-green-500/10 text-green-400',
+  };
 
   const upcomingPosts = posts
     .filter(p => p.status === 'scheduled')
@@ -30,131 +79,327 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-gray-400 mt-1">Gerencie seus posts e campanhas</p>
+      {/* Welcome Banner */}
+      {isWelcome && (
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-violet-600/20 to-purple-600/10 border border-violet-500/20">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-violet-600">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-white mb-1">Bem-vindo ao MediaAI! 🎉</h2>
+              <p className="text-gray-400 mb-4">Sua agência está pronta para começar. Aqui estão seus próximos passos:</p>
+              <div className="grid md:grid-cols-3 gap-3">
+                <Link href="/dashboard/clients" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <Users className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Adicionar clientes</span>
+                </Link>
+                <Link href="/dashboard/settings" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <Building2 className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Configurar agência</span>
+                </Link>
+                <Link href="/dashboard/scheduler" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <Calendar className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Criar primeiro post</span>
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
-        <Link href="/dashboard/scheduler">
-          <Button leftIcon={<Plus className="w-4 h-4" />}>
-            Novo Post
-          </Button>
-        </Link>
+      )}
+
+      {/* Header with Client Selector */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {/* Client Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowClientSelector(!showClientSelector)}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all"
+            >
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-sm font-semibold">
+                {currentClient?.logo}
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-medium text-white">{currentClient?.name}</div>
+                <div className="text-xs text-gray-500">{selectedClient === 'all' ? 'Visão geral' : 'Cliente selecionado'}</div>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showClientSelector ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showClientSelector && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-[#111] border border-[#1a1a1a] rounded-xl shadow-2xl z-50 overflow-hidden">
+                {mockClients.map((client) => (
+                  <button
+                    key={client.id}
+                    onClick={() => {
+                      setSelectedClient(client.id);
+                      setShowClientSelector(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[#1a1a1a] transition-colors ${
+                      selectedClient === client.id ? 'bg-violet-500/10' : ''
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-sm">
+                      {client.logo}
+                    </div>
+                    <span className="text-sm text-white">{client.name}</span>
+                    {selectedClient === client.id && (
+                      <CheckCircle className="w-4 h-4 text-violet-400 ml-auto" />
+                    )}
+                  </button>
+                ))}
+                <div className="border-t border-[#1a1a1a]">
+                  <Link
+                    href="/dashboard/clients"
+                    className="flex items-center gap-2 px-4 py-3 text-sm text-violet-400 hover:bg-[#1a1a1a] transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Gerenciar clientes
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-gray-400 text-sm">
+              {selectedClient === 'all' ? 'Visão geral da agência' : `Gerenciando ${currentClient?.name}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-[#111] border border-[#1a1a1a]">
+            <Zap className="w-4 h-4 text-violet-400" />
+            <div className="text-sm">
+              <span className="text-white font-medium">{agencyStats.aiCreditsUsed.toLocaleString()}</span>
+              <span className="text-gray-500">/{agencyStats.aiCreditsLimit.toLocaleString()} créditos</span>
+            </div>
+          </div>
+
+          <Link href="/dashboard/scheduler">
+            <Button leftIcon={<Plus className="w-4 h-4" />}>
+              Novo Post
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
-          <Card key={i} className="p-6 hover:shadow-xl hover:shadow-white/10 transition-all duration-300 hover:-translate-y-1 group">
+          <Card key={i} className="p-6 hover:border-violet-500/20 transition-all duration-300 group">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-gray-400 text-sm">{stat.label}</p>
-                <p className="text-3xl font-bold text-white mt-2 group-hover:scale-105 transition-transform origin-left">{stat.value}</p>
+                <p className="text-3xl font-bold text-white mt-2">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.gradient} group-hover:scale-110 transition-transform duration-300`}>
-                <stat.icon className={`w-5 h-5 ${stat.gradient.includes('white') ? 'text-black' : 'text-white'}`} />
+              <div className={`p-3 rounded-xl ${colorClasses[stat.color as keyof typeof colorClasses]}`}>
+                <stat.icon className="w-5 h-5" />
               </div>
             </div>
           </Card>
         ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Link href="/dashboard/scheduler">
-          <Card className="p-6 hover:border-white/30 hover:shadow-xl hover:shadow-white/10 transition-all duration-300 cursor-pointer group hover:-translate-y-1">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-white to-gray-200 group-hover:scale-110 transition-transform duration-300">
-                <Calendar className="w-6 h-6 text-black" />
+      {/* Quick Actions for Agency View */}
+      {selectedClient === 'all' && (
+        <div className="grid md:grid-cols-4 gap-4">
+          <Link href="/dashboard/clients">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-violet-500/10">
+                  <Users className="w-5 h-5 text-violet-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Clientes</h3>
+                  <p className="text-xs text-gray-500">{agencyStats.totalClients} ativos</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-white group-hover:text-gray-200 transition-colors">Agendador</h3>
-                <p className="text-sm text-gray-400">Criar e agendar posts</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
-            </div>
-          </Card>
-        </Link>
+            </Card>
+          </Link>
 
-        <Link href="/dashboard/agents">
-          <Card className="p-6 hover:border-white/30 hover:shadow-xl hover:shadow-white/10 transition-all duration-300 cursor-pointer group hover:-translate-y-1">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-gray-300 to-gray-500 group-hover:scale-110 transition-transform duration-300">
-                <Sparkles className="w-6 h-6 text-black" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-white group-hover:text-gray-200 transition-colors">Agentes IA</h3>
-                <p className="text-sm text-gray-400">Gerar conteúdo com IA</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/dashboard/projects">
-          <Card className="p-6 hover:border-white/30 hover:shadow-xl hover:shadow-white/10 transition-all duration-300 cursor-pointer group hover:-translate-y-1">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-gray-600 to-gray-800 group-hover:scale-110 transition-transform duration-300">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-white group-hover:text-gray-200 transition-colors">Analytics</h3>
-                <p className="text-sm text-gray-400">Ver métricas e relatórios</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
-            </div>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Upcoming Posts */}
-      <Card>
-        <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Próximos Posts</h2>
           <Link href="/dashboard/scheduler">
-            <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Ver todos
-            </Button>
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-500/10">
+                  <Calendar className="w-5 h-5 text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Calendário</h3>
+                  <p className="text-xs text-gray-500">Agendar posts</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/agents">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-500/10">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">IA Criativa</h3>
+                  <p className="text-xs text-gray-500">Gerar conteúdo</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/analytics">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-green-500/10">
+                  <BarChart3 className="w-5 h-5 text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Relatórios</h3>
+                  <p className="text-xs text-gray-500">Analytics</p>
+                </div>
+              </div>
+            </Card>
           </Link>
         </div>
-        <div className="divide-y divide-[#1a1a1a]">
-          {upcomingPosts.length === 0 ? (
-            <div className="p-8 text-center">
-              <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">Nenhum post agendado</p>
-              <Link href="/dashboard/scheduler">
-                <Button variant="secondary" className="mt-4" leftIcon={<Plus className="w-4 h-4" />}>
-                  Agendar Post
-                </Button>
-              </Link>
+      )}
+
+      {/* Pending Approvals */}
+      {selectedClient === 'all' && agencyStats.pendingApproval > 0 && (
+        <Card>
+          <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+              <h2 className="text-lg font-semibold text-white">Aguardando Aprovação</h2>
+              <Badge variant="warning">{agencyStats.pendingApproval}</Badge>
             </div>
-          ) : (
-            upcomingPosts.map((post) => (
-              <div key={post.id} className="p-4 hover:bg-white/5 transition-colors">
-                <div className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white line-clamp-2">{post.content}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      {post.platforms.map((platform) => (
-                        <Badge key={platform} variant="info">{platform}</Badge>
-                      ))}
-                      <span className="text-xs text-gray-500">
-                        {new Date(post.scheduledAt).toLocaleDateString('pt-BR', { 
-                          day: '2-digit', 
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
+            <Link href="/dashboard/approvals">
+              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                Ver todos
+              </Button>
+            </Link>
+          </div>
+          <div className="divide-y divide-[#1a1a1a]">
+            {[
+              { client: 'Fashion Style', post: 'Promoção de verão com desconto especial...', time: '2h atrás' },
+              { client: 'Café Aroma', post: 'Novo blend especial chegando na próxima...', time: '5h atrás' },
+              { client: 'Tech Solutions', post: 'Conheça nossa nova solução para...', time: '1 dia atrás' },
+            ].map((item, i) => (
+              <div key={i} className="p-4 hover:bg-white/5 transition-colors flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400 font-semibold">
+                  {item.client.split(' ').map(w => w[0]).join('')}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white">{item.client}</p>
+                  <p className="text-sm text-gray-500 truncate">{item.post}</p>
+                </div>
+                <span className="text-xs text-gray-500">{item.time}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Quick Actions for Client View */}
+      {selectedClient !== 'all' && (
+        <div className="grid md:grid-cols-3 gap-4">
+          <Link href="/dashboard/scheduler">
+            <Card className="p-6 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-violet-500/10">
+                  <Calendar className="w-6 h-6 text-violet-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-white">Agendador</h3>
+                  <p className="text-sm text-gray-400">Criar e agendar posts</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-violet-400 group-hover:translate-x-1 transition-all" />
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/agents">
+            <Card className="p-6 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-purple-500/10">
+                  <Sparkles className="w-6 h-6 text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-white">Agentes IA</h3>
+                  <p className="text-sm text-gray-400">Gerar conteúdo com IA</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-violet-400 group-hover:translate-x-1 transition-all" />
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/analytics">
+            <Card className="p-6 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-green-500/10">
+                  <BarChart3 className="w-6 h-6 text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-white">Analytics</h3>
+                  <p className="text-sm text-gray-400">Ver métricas e relatórios</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-500 group-hover:text-violet-400 group-hover:translate-x-1 transition-all" />
+              </div>
+            </Card>
+          </Link>
+        </div>
+      )}
+
+      {/* Upcoming Posts */}
+      {selectedClient !== 'all' && (
+        <Card>
+          <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Próximos Posts</h2>
+            <Link href="/dashboard/scheduler">
+              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                Ver todos
+              </Button>
+            </Link>
+          </div>
+          <div className="divide-y divide-[#1a1a1a]">
+            {upcomingPosts.length === 0 ? (
+              <div className="p-8 text-center">
+                <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Nenhum post agendado</p>
+                <Link href="/dashboard/scheduler">
+                  <Button variant="secondary" className="mt-4" leftIcon={<Plus className="w-4 h-4" />}>
+                    Agendar Post
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              upcomingPosts.map((post) => (
+                <div key={post.id} className="p-4 hover:bg-white/5 transition-colors">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white line-clamp-2">{post.content}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {post.platforms.map((platform) => (
+                          <Badge key={platform} variant="info">{platform}</Badge>
+                        ))}
+                        <span className="text-xs text-gray-500">
+                          {new Date(post.scheduledAt).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+              ))
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

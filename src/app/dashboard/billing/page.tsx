@@ -10,284 +10,348 @@ import {
   History,
   Download,
   Calendar,
-  TrendingUp,
-  ArrowUpRight,
-  AlertCircle
+  QrCode,
+  Landmark
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
+import { cn } from '@/lib/utils';
+import { PLANS, formatPrice, type PaymentGateway } from '@/lib/payments';
 
-const plans = [
+// Gateways de pagamento disponíveis
+const paymentGateways = [
   {
-    id: 'starter',
-    name: 'Starter',
-    price: 97,
-    description: 'Para criadores individuais',
-    credits: 1000,
-    features: [
-      '1.000 créditos/mês',
-      '3 redes sociais',
-      'Agendamento básico',
-      'Suporte por email',
-      '5 projetos ativos',
-    ],
-    icon: Sparkles,
-    gradient: 'from-gray-600 to-gray-800',
-    popular: false,
+    id: 'pix' as const,
+    name: 'Pix',
+    description: 'Pagamento instantâneo',
+    icon: QrCode,
+    gateway: 'asaas' as PaymentGateway,
+    fee: '2.99%',
   },
   {
-    id: 'professional',
-    name: 'Professional',
-    price: 197,
-    description: 'Para pequenas equipes',
-    credits: 5000,
-    features: [
-      '5.000 créditos/mês',
-      'Redes ilimitadas',
-      'IA avançada',
-      'Analytics completo',
-      'Suporte prioritário',
-      'Projetos ilimitados',
-      'Colaboradores (até 3)',
-    ],
-    icon: Zap,
-    gradient: 'from-white to-gray-200',
-    popular: true,
+    id: 'mercadopago' as const,
+    name: 'Mercado Pago',
+    description: 'Cartão, Pix ou Boleto',
+    icon: Landmark,
+    gateway: 'mercadopago' as PaymentGateway,
+    fee: '3.99%',
   },
   {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 497,
-    description: 'Para agências',
-    credits: -1, // Ilimitado
-    features: [
-      'Créditos ilimitados',
-      'Multi-clientes',
-      'API completa',
-      'White-label',
-      'Gerente dedicado',
-      'SLA garantido',
-      'Treinamento personalizado',
-    ],
-    icon: Crown,
-    gradient: 'from-gray-400 to-gray-600',
-    popular: false,
+    id: 'stripe' as const,
+    name: 'Cartão Internacional',
+    description: 'Visa, Master, Amex',
+    icon: CreditCard,
+    gateway: 'stripe' as PaymentGateway,
+    fee: '3.99%',
   },
 ];
 
-const usageHistory = [
-  { date: '2026-01-11', action: 'Geração de Copy', credits: 5, agent: 'Copywriter' },
-  { date: '2026-01-11', action: 'Post Agendado', credits: 2, agent: 'Social Media' },
-  { date: '2026-01-10', action: 'Prompt de Imagem', credits: 8, agent: 'Image Creator' },
-  { date: '2026-01-10', action: 'Análise SEO', credits: 5, agent: 'SEO Expert' },
-  { date: '2026-01-09', action: 'Workflow Completo', credits: 45, agent: 'Maestro' },
-  { date: '2026-01-09', action: 'Geração de Copy', credits: 5, agent: 'Copywriter' },
-];
+const plans = PLANS.map((plan, index) => ({
+  ...plan,
+  icon: index === 0 ? Sparkles : index === 1 ? Zap : Crown,
+  gradient: index === 0 ? 'from-gray-600 to-gray-800' : 
+            index === 1 ? 'from-violet-600 to-purple-700' : 
+            'from-amber-500 to-orange-600',
+  popular: index === 1,
+}));
 
 const invoices = [
-  { id: 'INV-001', date: '2026-01-01', amount: 197, status: 'paid' },
-  { id: 'INV-002', date: '2025-12-01', amount: 197, status: 'paid' },
-  { id: 'INV-003', date: '2025-11-01', amount: 97, status: 'paid' },
+  { id: '1', date: '01/01/2026', amount: 497, status: 'paid', plan: 'Professional' },
+  { id: '2', date: '01/12/2025', amount: 497, status: 'paid', plan: 'Professional' },
+  { id: '3', date: '01/11/2025', amount: 497, status: 'paid', plan: 'Professional' },
 ];
 
 export default function BillingPage() {
-  const [currentPlan] = useState('professional');
-  const [creditsUsed] = useState(2550);
-  const [creditsTotal] = useState(5000);
+  const [selectedPlan, setSelectedPlan] = useState('professional');
+  const [selectedGateway, setSelectedGateway] = useState<string>('pix');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
 
-  const creditsPercentage = (creditsUsed / creditsTotal) * 100;
+  const currentPlan = plans.find(p => p.id === 'professional');
+  const currentUsage = {
+    credits: 4250,
+    limit: 10000,
+  };
+
+  const handleSelectPlan = (planId: string) => {
+    setSelectedPlan(planId);
+    setShowPaymentOptions(true);
+  };
+
+  const handleCheckout = async () => {
+    setIsLoading(true);
+    
+    try {
+      const gateway = paymentGateways.find(g => g.id === selectedGateway);
+      if (!gateway) return;
+
+      const endpoint = gateway.gateway === 'stripe' 
+        ? '/api/stripe/checkout'
+        : gateway.gateway === 'asaas'
+        ? '/api/payments/asaas/checkout'
+        : '/api/payments/mercadopago/checkout';
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: selectedPlan,
+          agencyId: 'agency-id-here',
+          customerEmail: 'user@email.com',
+          billingType: selectedGateway === 'pix' ? 'PIX' : 'CREDIT_CARD',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error) {
+      console.error('Erro ao processar pagamento:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Planos e Cobrança</h1>
-        <p className="text-gray-400 mt-1">Gerencie sua assinatura e créditos</p>
+        <h1 className="text-2xl font-bold text-white">Faturamento</h1>
+        <p className="text-gray-400">Gerencie seu plano e pagamentos</p>
       </div>
 
-      {/* Current Usage */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <Card className="p-6 md:col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Uso de Créditos</h2>
-              <p className="text-sm text-gray-400">Período atual: Janeiro 2026</p>
+      {/* Current Plan Card */}
+      <Card className="p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              'p-3 rounded-xl bg-gradient-to-br',
+              currentPlan?.gradient
+            )}>
+              {currentPlan && <currentPlan.icon className="w-6 h-6 text-white" />}
             </div>
-            <Badge variant="info">Professional</Badge>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-white">{currentPlan?.name}</h2>
+                <Badge variant="success">Ativo</Badge>
+              </div>
+              <p className="text-gray-400">
+                Renovação em 15 de Fevereiro, 2026
+              </p>
+            </div>
           </div>
           
-          <div className="mb-4">
-            <div className="flex items-end justify-between mb-2">
-              <div>
-                <span className="text-4xl font-bold text-white">{creditsUsed.toLocaleString()}</span>
-                <span className="text-gray-400 ml-2">/ {creditsTotal.toLocaleString()} créditos</span>
-              </div>
-              <span className="text-sm text-gray-400">{Math.round(creditsPercentage)}% usado</span>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="text-center px-6 py-3 bg-[#0a0a0a] rounded-xl">
+              <p className="text-2xl font-bold text-white">{formatPrice(currentPlan?.price || 0)}</p>
+              <p className="text-xs text-gray-500">por mês</p>
             </div>
-            <div className="w-full h-3 bg-[#1a1a2e] rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all ${
-                  creditsPercentage > 90 ? 'bg-red-500' : 
-                  creditsPercentage > 70 ? 'bg-amber-500' : 
-                  'bg-gradient-to-r from-gray-600 to-white'
-                }`}
-                style={{ width: `${creditsPercentage}%` }}
-              />
+            <div className="text-center px-6 py-3 bg-[#0a0a0a] rounded-xl">
+              <p className="text-2xl font-bold text-white">
+                {currentUsage.credits.toLocaleString()}/{currentUsage.limit.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-500">créditos usados</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#1a1a2e]">
-            <div>
-              <p className="text-sm text-gray-400">Restantes</p>
-              <p className="text-xl font-bold text-white">{(creditsTotal - creditsUsed).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Média/dia</p>
-              <p className="text-xl font-bold text-white">232</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Projeção</p>
-              <p className="text-xl font-bold text-amber-400">7.192</p>
-            </div>
+        </div>
+        
+        {/* Usage Bar */}
+        <div className="mt-6">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-gray-400">Uso de créditos IA</span>
+            <span className="text-white">{Math.round((currentUsage.credits / currentUsage.limit) * 100)}%</span>
           </div>
-
-          {creditsPercentage > 80 && (
-            <div className="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
-              <div className="flex-1">
-                <p className="text-amber-400 text-sm font-medium">Créditos acabando</p>
-                <p className="text-amber-400/70 text-xs">Considere fazer upgrade do seu plano</p>
-              </div>
-              <Button size="sm" variant="secondary">
-                Upgrade
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Próxima Cobrança</h3>
-          <div className="text-center py-4">
-            <p className="text-4xl font-bold text-white">R$ 197</p>
-            <p className="text-gray-400 mt-1">em 01/02/2026</p>
+          <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-violet-600 to-purple-600 rounded-full transition-all duration-500"
+              style={{ width: `${(currentUsage.credits / currentUsage.limit) * 100}%` }}
+            />
           </div>
-          <div className="space-y-3 pt-4 border-t border-[#1a1a2e]">
-            <div className="flex items-center gap-3 text-sm">
-              <CreditCard className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-400">Visa •••• 4242</span>
-            </div>
-            <Button variant="ghost" size="sm" className="w-full">
-              Alterar método de pagamento
-            </Button>
-          </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
 
       {/* Plans */}
       <div>
-        <h2 className="text-lg font-semibold text-white mb-6">Planos Disponíveis</h2>
-        <div className="grid md:grid-cols-3 gap-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Planos Disponíveis</h2>
+        <div className="grid lg:grid-cols-3 gap-6">
           {plans.map((plan) => (
             <Card 
               key={plan.id}
-              className={`relative overflow-hidden ${
-                plan.popular ? 'ring-2 ring-white shadow-lg shadow-white/10' : ''
-              }`}
+              className={cn(
+                'relative p-6 transition-all duration-300 hover:-translate-y-1',
+                selectedPlan === plan.id && 'ring-2 ring-violet-500 border-violet-500/50',
+                plan.popular && 'border-violet-500/30'
+              )}
             >
               {plan.popular && (
-                <div className="absolute top-0 right-0 px-3 py-1 bg-gradient-to-r from-black to-gray-800 text-white text-xs font-medium rounded-bl-xl">
-                  Atual
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <Badge className="bg-violet-600">Mais Popular</Badge>
                 </div>
               )}
-              <div className="p-6">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${plan.gradient} flex items-center justify-center mb-4`}>
-                  <plan.icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-white">{plan.name}</h3>
-                <p className="text-sm text-gray-400 mb-4">{plan.description}</p>
-                <div className="mb-6">
-                  <span className="text-3xl font-bold text-white">R$ {plan.price}</span>
-                  <span className="text-gray-500">/mês</span>
-                </div>
-                <ul className="space-y-3 mb-6">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-gray-300">
-                      <Check className="w-4 h-4 text-white shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button 
-                  variant={currentPlan === plan.id ? 'secondary' : 'primary'}
-                  className="w-full"
-                  disabled={currentPlan === plan.id}
-                >
-                  {currentPlan === plan.id ? 'Plano Atual' : 
-                   plans.findIndex(p => p.id === currentPlan) < plans.findIndex(p => p.id === plan.id) 
-                    ? 'Fazer Upgrade' : 'Downgrade'}
-                </Button>
+              
+              <div className={cn(
+                'w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4',
+                plan.gradient
+              )}>
+                <plan.icon className="w-6 h-6 text-white" />
               </div>
+              
+              <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-3xl font-bold text-white">{formatPrice(plan.price)}</span>
+                <span className="text-gray-500">/mês</span>
+              </div>
+              
+              <ul className="mt-6 space-y-3">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-gray-400">
+                    <Check className="w-4 h-4 text-green-500 shrink-0" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              
+              <Button 
+                className="w-full mt-6"
+                variant={plan.id === currentPlan?.id ? 'secondary' : 'primary'}
+                disabled={plan.id === currentPlan?.id}
+                onClick={() => handleSelectPlan(plan.id)}
+              >
+                {plan.id === currentPlan?.id ? 'Plano Atual' : 'Selecionar'}
+              </Button>
             </Card>
           ))}
         </div>
       </div>
 
-      {/* Usage History & Invoices */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Usage History */}
-        <Card>
-          <div className="p-6 border-b border-[#1a1a2e] flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Histórico de Uso</h3>
-            <Button variant="ghost" size="sm" leftIcon={<TrendingUp className="w-4 h-4" />}>
-              Ver tudo
-            </Button>
-          </div>
-          <div className="divide-y divide-[#1a1a2e]">
-            {usageHistory.map((item, i) => (
-              <div key={i} className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-white font-medium">{item.action}</p>
-                  <p className="text-sm text-gray-500">{item.agent} • {item.date}</p>
-                </div>
-                <span className="text-amber-400 font-medium">-{item.credits}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Invoices */}
-        <Card>
-          <div className="p-6 border-b border-[#1a1a2e] flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Faturas</h3>
-            <Button variant="ghost" size="sm" leftIcon={<History className="w-4 h-4" />}>
-              Histórico
-            </Button>
-          </div>
-          <div className="divide-y divide-[#1a1a2e]">
-            {invoices.map((invoice) => (
-              <div key={invoice.id} className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-lg bg-[#1a1a2e]">
-                    <Calendar className="w-4 h-4 text-gray-400" />
+      {/* Payment Options Modal */}
+      {showPaymentOptions && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-white mb-2">Escolha a Forma de Pagamento</h2>
+            <p className="text-gray-400 text-sm mb-6">
+              Plano selecionado: <span className="text-white font-medium">{plans.find(p => p.id === selectedPlan)?.name}</span>
+              {' - '}{formatPrice(plans.find(p => p.id === selectedPlan)?.price || 0)}/mês
+            </p>
+            
+            <div className="space-y-3">
+              {paymentGateways.map((gateway) => (
+                <button
+                  key={gateway.id}
+                  onClick={() => setSelectedGateway(gateway.id)}
+                  className={cn(
+                    'w-full flex items-center gap-4 p-4 rounded-xl border transition-all',
+                    selectedGateway === gateway.id 
+                      ? 'bg-violet-500/10 border-violet-500/50' 
+                      : 'bg-[#0a0a0a] border-[#1a1a1a] hover:border-violet-500/30'
+                  )}
+                >
+                  <div className={cn(
+                    'w-12 h-12 rounded-xl flex items-center justify-center',
+                    selectedGateway === gateway.id ? 'bg-violet-500/20' : 'bg-[#1a1a1a]'
+                  )}>
+                    <gateway.icon className={cn(
+                      'w-6 h-6',
+                      selectedGateway === gateway.id ? 'text-violet-400' : 'text-gray-400'
+                    )} />
                   </div>
-                  <div>
-                    <p className="text-white font-medium">{invoice.id}</p>
-                    <p className="text-sm text-gray-500">{invoice.date}</p>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-white">{gateway.name}</p>
+                    <p className="text-sm text-gray-500">{gateway.description}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-white font-medium">R$ {invoice.amount}</p>
-                    <Badge variant="success">Pago</Badge>
+                    <p className="text-xs text-gray-500">Taxa</p>
+                    <p className="text-sm text-white">{gateway.fee}</p>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Download className="w-4 h-4" />
-                  </Button>
+                  {selectedGateway === gateway.id && (
+                    <Check className="w-5 h-5 text-violet-400" />
+                  )}
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <Button 
+                variant="ghost" 
+                className="flex-1"
+                onClick={() => setShowPaymentOptions(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={handleCheckout}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Processando...' : 'Continuar'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Invoice History */}
+      <Card>
+        <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <History className="w-5 h-5" />
+            Histórico de Faturas
+          </h2>
+          <Button variant="ghost" size="sm" leftIcon={<Download className="w-4 h-4" />}>
+            Exportar
+          </Button>
+        </div>
+        <div className="divide-y divide-[#1a1a1a]">
+          {invoices.map((invoice) => (
+            <div key={invoice.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-[#1a1a1a] flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-gray-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">{invoice.date}</p>
+                  <p className="text-sm text-gray-500">{invoice.plan}</p>
                 </div>
               </div>
-            ))}
+              <div className="flex items-center gap-4">
+                <span className="text-white font-medium">{formatPrice(invoice.amount)}</span>
+                <Badge variant="success">Pago</Badge>
+                <Button variant="ghost" size="sm">
+                  <Download className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Payment Methods Info */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <CreditCard className="w-5 h-5" />
+          Formas de Pagamento Aceitas
+        </h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="p-4 bg-[#0a0a0a] rounded-xl">
+            <QrCode className="w-8 h-8 text-green-400 mb-2" />
+            <h3 className="font-medium text-white">Pix</h3>
+            <p className="text-sm text-gray-500">Pagamento instantâneo via QR Code ou copia e cola</p>
           </div>
-        </Card>
-      </div>
+          <div className="p-4 bg-[#0a0a0a] rounded-xl">
+            <CreditCard className="w-8 h-8 text-blue-400 mb-2" />
+            <h3 className="font-medium text-white">Cartão de Crédito</h3>
+            <p className="text-sm text-gray-500">Visa, Mastercard, Amex, Elo e mais</p>
+          </div>
+          <div className="p-4 bg-[#0a0a0a] rounded-xl">
+            <Landmark className="w-8 h-8 text-orange-400 mb-2" />
+            <h3 className="font-medium text-white">Boleto</h3>
+            <p className="text-sm text-gray-500">Compensação em até 3 dias úteis</p>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
