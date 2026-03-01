@@ -126,8 +126,12 @@ export const CREDIT_COSTS = {
   generate_caption: 5,
   generate_hashtags: 3,
   generate_image: 50,
+  generate_video: 100,
   ai_chat: 2,
   ai_predict: 15,
+  ai_pipeline: 15,
+  ai_campaign: 30,
+  ai_schedule: 20,
   
   // Publicação
   schedule_post: 1,

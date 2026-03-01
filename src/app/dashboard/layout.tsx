@@ -65,7 +65,7 @@ const navigation = [
   { name: 'Link in Bio', href: '/dashboard/links', icon: Link2 },
   { name: 'Anúncios', href: '/dashboard/ads', icon: Megaphone },
   { name: 'Projetos', href: '/dashboard/projects', icon: FolderKanban },
-  { name: 'Agentes IA', href: '/dashboard/agents', icon: Bot },
+  { name: 'Central IA', href: '/dashboard/agents', icon: Sparkles },
   { name: 'Equipe', href: '/dashboard/team', icon: UsersRound },
   { name: 'Planos', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Configurações', href: '/dashboard/settings', icon: Settings },
