@@ -84,13 +84,15 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: {
               id: data.user.id,
-              name: data.profile?.full_name || data.user.user_metadata?.name || data.user.email.split('@')[0],
+              name: data.profile?.fullName || data.user.user_metadata?.name || data.user.email.split('@')[0],
               email: data.user.email,
-              avatar: data.profile?.avatar_url || data.user.user_metadata?.avatar_url,
+              avatar: data.profile?.avatarUrl || data.user.user_metadata?.avatar_url,
               role: data.profile?.role || 'agency_member',
-              agency_id: data.profile?.agency_id,
+              agency_id: data.profile?.agencyId,
               agency_name: data.agency?.name,
               plan: data.agency?.plan,
+              credits: data.agency?.aiCreditsUsed || 0,
+              creditsLimit: data.agency?.aiCreditsLimit || 2000,
             },
             token: data.session?.access_token || 'authenticated',
             isAuthenticated: true,
