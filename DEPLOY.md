@@ -56,7 +56,7 @@ Dashboard Stripe → Developers → API Keys:
 
 ### 2.4 Configurar Webhook
 Dashboard Stripe → Developers → Webhooks → Add Endpoint:
-- URL: https://SEU-DOMINIO.com/api/webhooks/stripe
+- URL: https://www.mediamars.com.br/api/stripe/webhook
 - Events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted
 - Copie o Signing Secret: whsec_xxx
 
@@ -95,7 +95,7 @@ STRIPE_PRICE_ENTERPRISE=price_xxx
 
 OPENAI_API_KEY=sk-proj-xxx
 
-NEXT_PUBLIC_APP_URL=https://seu-dominio.com
+NEXT_PUBLIC_APP_URL=https://www.mediamars.com.br
 ```
 
 ### 3.4 Deploy
@@ -113,7 +113,7 @@ Opções recomendadas:
 
 ### 4.2 Configurar na Vercel
 1. Vercel → Seu Projeto → Settings → Domains
-2. Adicione seu domínio (ex: mediaai.com.br)
+2. Adicione seu domínio: mediamars.com.br e www.mediamars.com.br
 3. Configure os DNS conforme instruções da Vercel:
    - Tipo A: 76.76.19.19
    - Tipo CNAME: cname.vercel-dns.com
@@ -131,8 +131,8 @@ Após ter o domínio, atualize o webhook no Stripe:
 
 ### 5.2 Configurar Supabase URL Redirect
 Supabase Dashboard → Authentication → URL Configuration:
-- Site URL: https://seu-dominio.com
-- Redirect URLs: https://seu-dominio.com/auth/callback
+- Site URL: https://www.mediamars.com.br
+- Redirect URLs: https://www.mediamars.com.br/**
 
 ### 5.3 Testar Fluxo Completo
 1. ✅ Registro de nova agência

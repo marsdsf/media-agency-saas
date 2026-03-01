@@ -51,7 +51,7 @@
 ### Passo 4: Configurar Webhook
 1. Vá em "Developers" > "Webhooks"
 2. Clique em "Add endpoint"
-3. URL: `https://seudominio.com/api/stripe/webhook`
+3. URL: `https://www.mediamars.com.br/api/stripe/webhook`
 4. Eventos:
    - `checkout.session.completed`
    - `customer.subscription.updated`
@@ -110,7 +110,7 @@
 ### Passo 5: Configurar OAuth
 1. Em "Facebook Login" > "Settings"
 2. Adicione Redirect URI:
-   `https://seudominio.com/api/social/instagram/callback`
+   `https://www.mediamars.com.br/api/social/instagram/callback`
 
 ### Passo 6: Solicitar permissões (para produção)
 1. Em "App Review" > "Permissions and Features"
@@ -151,7 +151,7 @@ META_APP_ID=123456789...
 META_APP_SECRET=abc123...
 
 # App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=https://www.mediamars.com.br
 ```
 
 ---

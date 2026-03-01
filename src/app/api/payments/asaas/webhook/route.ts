@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // Webhook do Asaas
-// Configure a URL: https://seu-dominio.com/api/payments/asaas/webhook
+// Configure a URL: https://www.mediamars.com.br/api/payments/asaas/webhook
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

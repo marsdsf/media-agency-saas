@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // Webhook do Mercado Pago
-// Configure a URL: https://seu-dominio.com/api/payments/mercadopago/webhook
+// Configure a URL: https://www.mediamars.com.br/api/payments/mercadopago/webhook
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
