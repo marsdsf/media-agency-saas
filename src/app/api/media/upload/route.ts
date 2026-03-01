@@ -65,13 +65,15 @@ export async function POST(request: NextRequest) {
       .insert({
         agency_id: ctx.agencyId,
         client_id: clientId || null,
-        file_name: file.name,
+        name: file.name,
         file_size: file.size,
         type: fileType,
-        url: urlData.publicUrl,
+        file_url: urlData.publicUrl,
+        thumbnail_url: fileType === 'image' ? urlData.publicUrl : null,
         storage_path: storagePath,
         mime_type: mimeType,
         tags: tags ? tags.split(',').map(t => t.trim()) : [],
+        uploaded_by: ctx.userId,
       })
       .select()
       .single();

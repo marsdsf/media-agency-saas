@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
@@ -38,11 +38,13 @@ import {
   Music,
   Sparkles,
   CheckCircle,
-  Eye
+  Eye,
+  ShoppingBag,
+  Rocket,
 } from 'lucide-react';
 import { Button, Avatar, Badge } from '@/lib/ui';
 
-const navigation = [
+const agencyNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clientes', href: '/dashboard/clients', icon: Users, badge: 'Novo' },
   { name: 'Agendador', href: '/dashboard/scheduler', icon: Calendar },
@@ -71,6 +73,24 @@ const navigation = [
   { name: 'Configurações', href: '/dashboard/settings', icon: Settings },
 ];
 
+const soloNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Produtos', href: '/dashboard/products', icon: ShoppingBag, badge: 'Novo' },
+  { name: 'AI Studio', href: '/dashboard/ai-studio', icon: Sparkles, badge: 'IA' },
+  { name: 'Calendário', href: '/dashboard/calendar', icon: CalendarDays },
+  { name: 'Autopilot', href: '/dashboard/autopilot', icon: Rocket },
+  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+  { name: 'Aprovações', href: '/dashboard/approvals', icon: CheckCircle },
+  { name: 'Templates', href: '/dashboard/templates', icon: FileText },
+  { name: 'Biblioteca', href: '/dashboard/media', icon: Image },
+  { name: 'Brand Kit', href: '/dashboard/brand', icon: Palette },
+  { name: 'Tendências', href: '/dashboard/trends', icon: TrendingUp },
+  { name: 'Hashtags', href: '/dashboard/hashtags', icon: Hash },
+  { name: 'Link in Bio', href: '/dashboard/links', icon: Link2 },
+  { name: 'Planos', href: '/dashboard/billing', icon: CreditCard },
+  { name: 'Configurações', href: '/dashboard/settings', icon: Settings },
+];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -78,6 +98,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useRealtimeNotifications(user?.id);
+
+  const isSolo = user?.account_type === 'solo';
+  const navigation = useMemo(() => isSolo ? soloNavigation : agencyNavigation, [isSolo]);
+
+  // Fetch account_type on mount if not set
+  useEffect(() => {
+    if (user?.id && !user.account_type) {
+      fetch('/api/business/profile')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.accountType) {
+            useAuthStore.setState(state => ({
+              user: state.user ? { ...state.user, account_type: d.accountType } : state.user
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.id, user?.account_type]);
 
   const handleLogout = () => {
     logout();

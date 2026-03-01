@@ -46,6 +46,7 @@ interface User {
   plan?: string;
   credits?: number;
   creditsLimit?: number;
+  account_type?: 'agency' | 'solo';
 }
 
 interface AuthState {

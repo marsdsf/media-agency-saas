@@ -247,6 +247,7 @@ async function handleInviteRegistration(params: {
   inviteToken: string;
 }) {
   const { name, email, password, inviteToken } = params;
+  const supabaseAdmin = getSupabaseAdmin();
 
   if (!name || !email || !password) {
     return NextResponse.json(

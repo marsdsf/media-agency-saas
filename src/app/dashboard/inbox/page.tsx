@@ -1,30 +1,28 @@
 'use client';
 
-import { useState } from 'react';
-import { 
+import { useState, useEffect, useRef } from 'react';
+import {
   MessageCircle,
   Search,
-  Filter,
   Star,
   Archive,
-  Trash2,
-  Reply,
   Send,
   Instagram,
   Facebook,
   Linkedin,
   MoreVertical,
-  Clock,
   Check,
   CheckCheck,
   Sparkles,
   Bot,
-  User,
   Tag,
-  Pin
+  Loader2,
+  Plus,
+  RefreshCw,
 } from 'lucide-react';
-import { Button, Card, Badge, Input, Textarea } from '@/lib/ui';
+import { Button, Card, Input, Textarea } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useApiData, useApiMutation } from '@/hooks/useApiData';
 
 const FaTiktok = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -32,44 +30,32 @@ const FaTiktok = () => (
   </svg>
 );
 
-interface Message {
+interface Conversation {
   id: string;
-  contact: string;
-  avatar: string;
+  contact_name: string;
+  contact_avatar: string | null;
   platform: string;
-  lastMessage: string;
-  timestamp: string;
-  unread: number;
-  isStarred: boolean;
-  isPinned: boolean;
-  status: 'online' | 'offline';
+  status: string;
+  is_starred: boolean;
+  is_pinned: boolean;
+  unread_count: number;
+  last_message_at: string | null;
+  last_message_preview: string | null;
   tags: string[];
+  assigned_to: string | null;
 }
 
 interface ChatMessage {
   id: string;
-  sender: 'user' | 'contact';
+  conversation_id: string;
+  sender_type: 'contact' | 'agent' | 'system' | 'ai';
+  sender_name: string | null;
   content: string;
-  timestamp: string;
-  isRead: boolean;
+  content_type: string;
+  media_url: string | null;
+  is_read: boolean;
+  created_at: string;
 }
-
-const messages: Message[] = [
-  { id: '1', contact: 'Maria Silva', avatar: 'M', platform: 'instagram', lastMessage: 'Olá! Vi o post sobre marketing digital e gostei muito...', timestamp: '10:30', unread: 3, isStarred: true, isPinned: true, status: 'online', tags: ['lead', 'hot'] },
-  { id: '2', contact: 'João Santos', avatar: 'J', platform: 'facebook', lastMessage: 'Quanto custa o serviço de gestão de redes sociais?', timestamp: '09:45', unread: 1, isStarred: false, isPinned: false, status: 'offline', tags: ['lead'] },
-  { id: '3', contact: 'Ana Beatriz', avatar: 'A', platform: 'instagram', lastMessage: 'Perfeito! Vou aguardar o orçamento então 😊', timestamp: 'Ontem', unread: 0, isStarred: false, isPinned: false, status: 'online', tags: ['cliente'] },
-  { id: '4', contact: 'Carlos Mendes', avatar: 'C', platform: 'linkedin', lastMessage: 'Interessante a proposta. Podemos agendar uma call?', timestamp: 'Ontem', unread: 0, isStarred: true, isPinned: false, status: 'offline', tags: ['parceiro'] },
-  { id: '5', contact: 'Fernanda Lima', avatar: 'F', platform: 'instagram', lastMessage: 'Adorei o trabalho de vocês! 🔥', timestamp: '2 dias', unread: 0, isStarred: false, isPinned: false, status: 'offline', tags: [] },
-];
-
-const chatMessages: ChatMessage[] = [
-  { id: '1', sender: 'contact', content: 'Olá! Tudo bem?', timestamp: '10:25', isRead: true },
-  { id: '2', sender: 'contact', content: 'Vi o post sobre marketing digital e gostei muito do conteúdo!', timestamp: '10:26', isRead: true },
-  { id: '3', sender: 'user', content: 'Olá Maria! Que bom que gostou! 😊', timestamp: '10:28', isRead: true },
-  { id: '4', sender: 'contact', content: 'Vocês fazem gestão de redes sociais?', timestamp: '10:28', isRead: true },
-  { id: '5', sender: 'contact', content: 'Tenho uma loja online e preciso de ajuda com o Instagram', timestamp: '10:29', isRead: true },
-  { id: '6', sender: 'contact', content: 'Podem me enviar mais informações?', timestamp: '10:30', isRead: false },
-];
 
 const quickReplies = [
   'Olá! Obrigado pelo contato! 😊',
@@ -83,59 +69,183 @@ const platformIcons: Record<string, React.ComponentType<any>> = {
   facebook: Facebook,
   linkedin: Linkedin,
   tiktok: FaTiktok,
+  whatsapp: MessageCircle,
+  email: MessageCircle,
+  twitter: MessageCircle,
 };
 
+const tagColors: Record<string, string> = {
+  lead: 'bg-blue-500/20 text-blue-400',
+  hot: 'bg-red-500/20 text-red-400',
+  cliente: 'bg-emerald-500/20 text-emerald-400',
+  parceiro: 'bg-purple-500/20 text-purple-400',
+};
+
+function formatTimestamp(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Ontem';
+  } else if (diffDays < 7) {
+    return `${diffDays} dias`;
+  } else {
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  }
+}
+
 export default function InboxPage() {
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(messages[0]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [reply, setReply] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'starred'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const filteredMessages = messages.filter(msg => {
-    if (filter === 'unread') return msg.unread > 0;
-    if (filter === 'starred') return msg.isStarred;
+  // Build URL with filters
+  const inboxParams = new URLSearchParams();
+  if (filter === 'starred') inboxParams.set('starred', 'true');
+  if (searchQuery) inboxParams.set('search', searchQuery);
+  inboxParams.set('status', 'all');
+  const inboxUrl = `/api/inbox?${inboxParams.toString()}`;
+
+  const { data: inboxData, loading: loadingConversations, error: inboxError, refetch: refetchInbox } =
+    useApiData<{ conversations: Conversation[]; unreadCount: number }>(inboxUrl, { refreshKey });
+
+  // Messages for selected conversation
+  const messagesUrl = selectedConversation
+    ? `/api/inbox/messages?conversation_id=${selectedConversation.id}`
+    : null;
+  const { data: messagesData, loading: loadingMessages, refetch: refetchMessages } =
+    useApiData<{ messages: ChatMessage[] }>(messagesUrl, { refreshKey });
+
+  const sendMessageMutation = useApiMutation('/api/inbox', 'POST');
+  const updateConversationMutation = useApiMutation('/api/inbox', 'PATCH');
+
+  const conversations = inboxData?.conversations || [];
+
+  // Filter client-side for unread (API doesn't filter by unread directly)
+  const filteredConversations = conversations.filter((conv) => {
+    if (filter === 'unread') return conv.unread_count > 0;
     return true;
   });
 
-  const tagColors: Record<string, string> = {
-    lead: 'bg-blue-500/20 text-blue-400',
-    hot: 'bg-red-500/20 text-red-400',
-    cliente: 'bg-emerald-500/20 text-emerald-400',
-    parceiro: 'bg-purple-500/20 text-purple-400',
+  // Auto-scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messagesData?.messages]);
+
+  // Auto-select first conversation
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      setSelectedConversation(conversations[0]);
+    }
+  }, [conversations, selectedConversation]);
+
+  const handleSendMessage = async () => {
+    if (!reply.trim() || !selectedConversation) return;
+    try {
+      await sendMessageMutation.mutate({
+        conversationId: selectedConversation.id,
+        content: reply.trim(),
+        contentType: 'text',
+      });
+      setReply('');
+      refetchMessages();
+      refetchInbox();
+    } catch {
+      // error already in mutation state
+    }
+  };
+
+  const handleToggleStar = async (conv: Conversation, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await updateConversationMutation.mutate({
+        id: conv.id,
+        isStarred: !conv.is_starred,
+      });
+      refetchInbox();
+    } catch {
+      // error handled by mutation
+    }
+  };
+
+  const handleArchive = async (conv: Conversation) => {
+    try {
+      await updateConversationMutation.mutate({
+        id: conv.id,
+        status: conv.status === 'archived' ? 'open' : 'archived',
+      });
+      if (selectedConversation?.id === conv.id) setSelectedConversation(null);
+      refetchInbox();
+    } catch {
+      // error handled
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Integration Notice */}
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center gap-3">
-        <Sparkles className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-        <div>
-          <p className="text-sm text-yellow-200 font-medium">Modo de demonstração</p>
-          <p className="text-xs text-yellow-400/70">A Inbox Unificada requer integração com as APIs do Instagram, Facebook e LinkedIn para mensagens reais. Conecte suas contas em Configurações.</p>
-        </div>
-      </div>
-
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative">
         <div className="absolute -top-4 -left-4 w-24 h-24 bg-white/5 rounded-full blur-2xl animate-pulse" />
         <div className="relative">
           <h1 className="text-2xl font-bold text-white">Inbox</h1>
-          <p className="text-gray-400 mt-1">Gerencie todas as suas mensagens em um só lugar</p>
+          <p className="text-gray-400 mt-1">
+            Gerencie todas as suas mensagens em um só lugar
+            {inboxData?.unreadCount ? (
+              <span className="ml-2 px-2 py-0.5 rounded-full bg-white text-black text-xs font-bold">
+                {inboxData.unreadCount} não lidas
+              </span>
+            ) : null}
+          </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<RefreshCw className="w-4 h-4" />}
+            onClick={() => setRefreshKey((k) => k + 1)}
+          >
+            Atualizar
+          </Button>
           <Button variant="secondary" leftIcon={<Bot className="w-4 h-4" />}>
             Respostas Automáticas
           </Button>
         </div>
       </div>
 
+      {inboxError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm">
+          Erro ao carregar conversas: {inboxError}
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-220px)]">
-        {/* Messages List */}
+        {/* Conversations List */}
         <Card className="lg:col-span-1 flex flex-col overflow-hidden">
           {/* Search & Filters */}
           <div className="p-4 border-b border-[#1a1a1a]">
             <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <Input placeholder="Buscar conversas..." className="pl-10" />
+              <Input
+                placeholder="Buscar conversas..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <div className="flex gap-2">
               {(['all', 'unread', 'starred'] as const).map((f) => (
@@ -155,94 +265,122 @@ export default function InboxPage() {
             </div>
           </div>
 
-          {/* Messages */}
+          {/* Conversations */}
           <div className="flex-1 overflow-y-auto">
-            {filteredMessages.map((msg) => {
-              const PlatformIcon = platformIcons[msg.platform];
-              return (
-                <div
-                  key={msg.id}
-                  onClick={() => setSelectedMessage(msg)}
-                  className={cn(
-                    'p-4 cursor-pointer transition-all border-b border-[#1a1a1a]',
-                    selectedMessage?.id === msg.id
-                      ? 'bg-white/10'
-                      : 'hover:bg-white/5',
-                    msg.isPinned && 'bg-white/5'
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="relative">
-                      <div className={cn(
-                        'w-10 h-10 rounded-full flex items-center justify-center font-bold',
-                        'bg-gradient-to-br from-white/20 to-white/5 text-white'
-                      )}>
-                        {msg.avatar}
-                      </div>
-                      {msg.status === 'online' && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0a0a0a]" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-medium text-white">{msg.contact}</h4>
-                          <PlatformIcon className="w-3 h-3 text-gray-500" />
-                          {msg.isStarred && <Star className="w-3 h-3 text-white fill-white" />}
+            {loadingConversations ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+              </div>
+            ) : filteredConversations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                <MessageCircle className="w-10 h-10 text-gray-600 mb-3" />
+                <p className="text-gray-400 text-sm">
+                  {filter !== 'all'
+                    ? 'Nenhuma conversa encontrada com este filtro'
+                    : 'Nenhuma conversa ainda'}
+                </p>
+                <p className="text-gray-500 text-xs mt-1">
+                  As conversas aparecerão aqui quando você conectar suas redes sociais
+                </p>
+              </div>
+            ) : (
+              filteredConversations.map((conv) => {
+                const PlatformIcon = platformIcons[conv.platform] || MessageCircle;
+                const avatar = conv.contact_avatar || conv.contact_name?.charAt(0)?.toUpperCase() || '?';
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => setSelectedConversation(conv)}
+                    className={cn(
+                      'p-4 cursor-pointer transition-all border-b border-[#1a1a1a]',
+                      selectedConversation?.id === conv.id
+                        ? 'bg-white/10'
+                        : 'hover:bg-white/5',
+                      conv.is_pinned && 'bg-white/5'
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative">
+                        <div className={cn(
+                          'w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm',
+                          'bg-gradient-to-br from-white/20 to-white/5 text-white'
+                        )}>
+                          {avatar.length === 1 ? avatar : avatar.charAt(0)}
                         </div>
-                        <span className="text-xs text-gray-500">{msg.timestamp}</span>
                       </div>
-                      <p className="text-sm text-gray-400 truncate">{msg.lastMessage}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        {msg.tags.map((tag) => (
-                          <span key={tag} className={cn('text-xs px-2 py-0.5 rounded-full', tagColors[tag] || 'bg-gray-500/20 text-gray-400')}>
-                            {tag}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-white truncate">{conv.contact_name}</h4>
+                            <PlatformIcon className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                            {conv.is_starred && <Star className="w-3 h-3 text-white fill-white flex-shrink-0" />}
+                          </div>
+                          <span className="text-xs text-gray-500 flex-shrink-0">
+                            {formatTimestamp(conv.last_message_at)}
                           </span>
-                        ))}
-                        {msg.unread > 0 && (
-                          <span className="ml-auto w-5 h-5 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center">
-                            {msg.unread}
-                          </span>
-                        )}
+                        </div>
+                        <p className="text-sm text-gray-400 truncate">
+                          {conv.last_message_preview || 'Sem mensagens'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          {(conv.tags || []).map((tag) => (
+                            <span
+                              key={tag}
+                              className={cn(
+                                'text-xs px-2 py-0.5 rounded-full',
+                                tagColors[tag] || 'bg-gray-500/20 text-gray-400'
+                              )}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {conv.unread_count > 0 && (
+                            <span className="ml-auto w-5 h-5 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center">
+                              {conv.unread_count}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </Card>
 
         {/* Chat */}
         <Card className="lg:col-span-2 flex flex-col overflow-hidden">
-          {selectedMessage ? (
+          {selectedConversation ? (
             <>
               {/* Chat Header */}
               <div className="p-4 border-b border-[#1a1a1a] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center text-white font-bold">
-                      {selectedMessage.avatar}
+                      {selectedConversation.contact_avatar?.charAt(0) ||
+                        selectedConversation.contact_name?.charAt(0)?.toUpperCase() || '?'}
                     </div>
-                    {selectedMessage.status === 'online' && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0a0a0a]" />
-                    )}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">{selectedMessage.contact}</h3>
-                    <p className="text-xs text-gray-500">
-                      {selectedMessage.status === 'online' ? 'Online agora' : 'Offline'}
-                    </p>
+                    <h3 className="font-semibold text-white">{selectedConversation.contact_name}</h3>
+                    <p className="text-xs text-gray-500 capitalize">{selectedConversation.platform}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all">
-                    <Star className={cn('w-4 h-4', selectedMessage.isStarred && 'fill-white text-white')} />
+                  <button
+                    onClick={() => handleToggleStar(selectedConversation)}
+                    className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                  >
+                    <Star className={cn('w-4 h-4', selectedConversation.is_starred && 'fill-white text-white')} />
                   </button>
                   <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all">
                     <Tag className="w-4 h-4" />
                   </button>
-                  <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all">
+                  <button
+                    onClick={() => handleArchive(selectedConversation)}
+                    className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                  >
                     <Archive className="w-4 h-4" />
                   </button>
                   <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all">
@@ -253,37 +391,94 @@ export default function InboxPage() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {chatMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      'flex',
-                      msg.sender === 'user' ? 'justify-end' : 'justify-start'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'max-w-[70%] px-4 py-3 rounded-2xl',
-                        msg.sender === 'user'
-                          ? 'bg-white text-black rounded-br-md'
-                          : 'bg-[#1a1a1a] text-white rounded-bl-md'
-                      )}
-                    >
-                      <p className="text-sm">{msg.content}</p>
-                      <div className={cn(
-                        'flex items-center gap-1 mt-1',
-                        msg.sender === 'user' ? 'justify-end' : 'justify-start'
-                      )}>
-                        <span className={cn('text-xs', msg.sender === 'user' ? 'text-gray-600' : 'text-gray-500')}>
-                          {msg.timestamp}
-                        </span>
-                        {msg.sender === 'user' && (
-                          msg.isRead ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3 text-gray-500" />
-                        )}
-                      </div>
-                    </div>
+                {loadingMessages ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
                   </div>
-                ))}
+                ) : (messagesData?.messages || []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <MessageCircle className="w-10 h-10 text-gray-600 mb-3" />
+                    <p className="text-gray-400 text-sm">Nenhuma mensagem ainda</p>
+                    <p className="text-gray-500 text-xs mt-1">Envie a primeira mensagem</p>
+                  </div>
+                ) : (
+                  (messagesData?.messages || []).map((msg) => {
+                    const isAgent = msg.sender_type === 'agent';
+                    const isSystem = msg.sender_type === 'system';
+                    const isAi = msg.sender_type === 'ai';
+
+                    if (isSystem) {
+                      return (
+                        <div key={msg.id} className="flex justify-center">
+                          <span className="text-xs text-gray-500 bg-[#1a1a1a] px-3 py-1 rounded-full">
+                            {msg.content}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={cn('flex', isAgent || isAi ? 'justify-end' : 'justify-start')}
+                      >
+                        <div
+                          className={cn(
+                            'max-w-[70%] px-4 py-3 rounded-2xl',
+                            isAgent
+                              ? 'bg-white text-black rounded-br-md'
+                              : isAi
+                                ? 'bg-purple-900/40 text-white rounded-br-md border border-purple-500/30'
+                                : 'bg-[#1a1a1a] text-white rounded-bl-md'
+                          )}
+                        >
+                          {isAi && (
+                            <div className="flex items-center gap-1 mb-1">
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                              <span className="text-xs text-purple-400">IA</span>
+                            </div>
+                          )}
+                          {msg.media_url && (
+                            <div className="mb-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={msg.media_url}
+                                alt="Media"
+                                className="rounded-lg max-w-full"
+                              />
+                            </div>
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                          <div
+                            className={cn(
+                              'flex items-center gap-1 mt-1',
+                              isAgent || isAi ? 'justify-end' : 'justify-start'
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'text-xs',
+                                isAgent ? 'text-gray-600' : 'text-gray-500'
+                              )}
+                            >
+                              {new Date(msg.created_at).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                            {isAgent &&
+                              (msg.is_read ? (
+                                <CheckCheck className="w-3 h-3 text-blue-500" />
+                              ) : (
+                                <Check className="w-3 h-3 text-gray-500" />
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={chatEndRef} />
               </div>
 
               {/* Quick Replies */}
@@ -294,7 +489,7 @@ export default function InboxPage() {
                     onClick={() => setReply(qr)}
                     className="flex-shrink-0 px-3 py-1.5 rounded-full bg-[#1a1a1a] text-gray-400 text-sm hover:bg-white/10 hover:text-white transition-all"
                   >
-                    {qr.slice(0, 30)}...
+                    {qr.length > 30 ? `${qr.slice(0, 30)}...` : qr}
                   </button>
                 ))}
               </div>
@@ -305,6 +500,7 @@ export default function InboxPage() {
                   <Textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     placeholder="Digite sua mensagem..."
                     rows={2}
                     className="flex-1"
@@ -313,11 +509,20 @@ export default function InboxPage() {
                     <Button variant="ghost" size="sm" leftIcon={<Sparkles className="w-4 h-4" />}>
                       IA
                     </Button>
-                    <Button size="sm" leftIcon={<Send className="w-4 h-4" />}>
+                    <Button
+                      size="sm"
+                      leftIcon={<Send className="w-4 h-4" />}
+                      onClick={handleSendMessage}
+                      isLoading={sendMessageMutation.loading}
+                      disabled={!reply.trim()}
+                    >
                       Enviar
                     </Button>
                   </div>
                 </div>
+                {sendMessageMutation.error && (
+                  <p className="text-red-400 text-xs mt-2">{sendMessageMutation.error}</p>
+                )}
               </div>
             </>
           ) : (
