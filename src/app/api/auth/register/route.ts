@@ -9,6 +9,14 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(request: NextRequest) {
   try {
+    // Validate env vars
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json(
+        { error: 'Servidor não configurado. Variáveis do Supabase ausentes.' },
+        { status: 500 }
+      );
+    }
+
     const { name, email, password, agencyName, agencyWebsite, teamSize, plan, inviteToken } = await request.json();
 
     // === FLUXO DE CONVITE ===
@@ -34,7 +42,8 @@ export async function POST(request: NextRequest) {
     const limits = planLimits[plan] || planLimits.starter;
 
     // 1. Create auth user
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    let authData;
+    const { data: createData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -46,14 +55,79 @@ export async function POST(request: NextRequest) {
 
     if (authError) {
       console.error('Auth error:', authError);
-      if (authError.message.includes('already registered')) {
+      
+      // If user already exists, check if they have a profile/agency
+      // If not, clean up the orphan auth user and retry
+      if (authError.message.includes('already') || authError.message.includes('duplicate') || authError.message.includes('unique')) {
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+        
+        if (existingUser) {
+          // Check if they have a profile
+          const { data: existingProfile } = await supabaseAdmin
+            .from('profiles')
+            .select('id, agency_id')
+            .eq('id', existingUser.id)
+            .single();
+          
+          if (existingProfile?.agency_id) {
+            // User fully registered — tell them to login
+            return NextResponse.json(
+              { error: 'Este email já está registrado. Faça login.' },
+              { status: 400 }
+            );
+          }
+          
+          // Orphan user — clean up and retry
+          console.log('Cleaning up orphan user:', existingUser.id);
+          await supabaseAdmin.from('profiles').delete().eq('id', existingUser.id);
+          await supabaseAdmin.from('agencies').delete().eq('owner_id', existingUser.id);
+          await supabaseAdmin.auth.admin.deleteUser(existingUser.id);
+          
+          // Retry creation
+          const { data: retryData, error: retryError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { name, role: 'agency_owner' },
+          });
+          
+          if (retryError) {
+            return NextResponse.json(
+              { error: `Erro ao criar usuário: ${retryError.message}` },
+              { status: 500 }
+            );
+          }
+          authData = retryData;
+        } else {
+          return NextResponse.json(
+            { error: 'Este email já está registrado' },
+            { status: 400 }
+          );
+        }
+      } else if (authError.message.includes('password')) {
         return NextResponse.json(
-          { error: 'Este email já está registrado' },
+          { error: 'A senha deve ter pelo menos 6 caracteres' },
           { status: 400 }
         );
+      } else if (authError.message.includes('valid email')) {
+        return NextResponse.json(
+          { error: 'Email inválido' },
+          { status: 400 }
+        );
+      } else {
+        return NextResponse.json(
+          { error: `Erro ao criar usuário: ${authError.message}` },
+          { status: 500 }
+        );
       }
+    } else {
+      authData = createData;
+    }
+
+    if (!authData?.user) {
       return NextResponse.json(
-        { error: 'Erro ao criar usuário' },
+        { error: 'Erro inesperado ao criar usuário' },
         { status: 500 }
       );
     }
@@ -61,11 +135,14 @@ export async function POST(request: NextRequest) {
     const userId = authData.user.id;
 
     // 2. Create agency
+    const baseSlug = agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const slug = `${baseSlug}-${Date.now().toString(36)}`;
+    
     const { data: agency, error: agencyError } = await supabaseAdmin
       .from('agencies')
       .insert({
         name: agencyName,
-        slug: agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
+        slug,
         website: agencyWebsite || null,
         owner_id: userId,
         plan,
@@ -87,7 +164,7 @@ export async function POST(request: NextRequest) {
       // Rollback: delete user if agency creation fails
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json(
-        { error: 'Erro ao criar agência' },
+        { error: `Erro ao criar agência: ${agencyError.message}` },
         { status: 500 }
       );
     }
@@ -110,7 +187,7 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('agencies').delete().eq('id', agency.id);
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json(
-        { error: 'Erro ao criar perfil' },
+        { error: `Erro ao criar perfil: ${profileError.message}` },
         { status: 500 }
       );
     }
