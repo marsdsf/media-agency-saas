@@ -14,14 +14,19 @@ export async function POST(request: NextRequest) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
 
-    const { name, email, password, agencyName, agencyWebsite, teamSize, plan, inviteToken } = await request.json();
+    const { name, email, password, agencyName, agencyWebsite, teamSize, plan, inviteToken, accountType } = await request.json();
 
     // === FLUXO DE CONVITE ===
     if (inviteToken) {
       return handleInviteRegistration({ name, email, password, inviteToken });
     }
 
-    // === FLUXO NORMAL ===
+    // === FLUXO SOLO (usuário comum / empreendedor) ===
+    if (accountType === 'solo') {
+      return handleSoloRegistration({ name, email, password, agencyName });
+    }
+
+    // === FLUXO AGÊNCIA ===
     if (!name || !email || !password || !agencyName) {
       return NextResponse.json(
         { error: 'Nome, email, senha e nome da agência são obrigatórios' },
@@ -394,6 +399,129 @@ async function handleInviteRegistration(params: {
       id: invitation.agency_id,
       name: agency?.name,
       slug: agency?.slug,
+    },
+  });
+}
+
+// Registrar como usuário solo (empreendedor)
+async function handleSoloRegistration(params: {
+  name: string;
+  email: string;
+  password: string;
+  agencyName: string;
+}) {
+  const { name, email, password, agencyName } = params;
+  const supabaseAdmin = getSupabaseAdmin();
+
+  if (!name || !email || !password) {
+    return NextResponse.json(
+      { error: 'Nome, email e senha são obrigatórios' },
+      { status: 400 }
+    );
+  }
+
+  // 1. Create auth user
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name, role: 'solo_owner' },
+  });
+
+  if (authError) {
+    if (authError.message.includes('already') || authError.message.includes('duplicate')) {
+      return NextResponse.json(
+        { error: 'Este email já está registrado. Faça login.' },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: `Erro ao criar usuário: ${authError.message}` },
+      { status: 500 }
+    );
+  }
+
+  const userId = authData.user.id;
+  const workspaceName = agencyName || name;
+  const baseSlug = workspaceName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const slug = `${baseSlug}-${Date.now().toString(36)}`;
+
+  // 2. Create workspace (agency record with account_type = 'solo')
+  const { data: agency, error: agencyError } = await supabaseAdmin
+    .from('agencies')
+    .insert({
+      name: workspaceName,
+      slug,
+      owner_id: userId,
+      plan: 'solo_free',
+      account_type: 'solo',
+      max_clients: 0,
+      max_team_members: 1,
+      ai_credits_limit: 5000,
+      ai_credits_used: 0,
+      trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      settings: { onboardingCompleted: false },
+    })
+    .select()
+    .single();
+
+  if (agencyError) {
+    await supabaseAdmin.auth.admin.deleteUser(userId);
+    return NextResponse.json(
+      { error: `Erro ao criar workspace: ${agencyError.message}` },
+      { status: 500 }
+    );
+  }
+
+  // 3. Create profile
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .insert({
+      id: userId,
+      email,
+      full_name: name,
+      role: 'solo_owner',
+      agency_id: agency.id,
+      permissions: ['*'],
+    });
+
+  if (profileError) {
+    await supabaseAdmin.from('agencies').delete().eq('id', agency.id);
+    await supabaseAdmin.auth.admin.deleteUser(userId);
+    return NextResponse.json(
+      { error: `Erro ao criar perfil: ${profileError.message}` },
+      { status: 500 }
+    );
+  }
+
+  // 4. Welcome notification
+  await supabaseAdmin.from('notifications').insert({
+    user_id: userId,
+    type: 'welcome',
+    title: 'Bem-vindo ao MediaAI! 🚀',
+    message: 'Sua conta foi criada. Complete o onboarding para a IA começar a criar posts automaticamente.',
+    action_url: '/onboarding',
+  });
+
+  // 5. Activity log
+  await supabaseAdmin.from('activity_log').insert({
+    agency_id: agency.id,
+    user_id: userId,
+    action: 'solo_account_created',
+    entity_type: 'agency',
+    entity_id: agency.id,
+    details: { name, accountType: 'solo' },
+  });
+
+  return NextResponse.json({
+    success: true,
+    user: { id: userId, email, name },
+    agency: {
+      id: agency.id,
+      name: agency.name,
+      slug: agency.slug,
+      plan: 'solo_free',
+      accountType: 'solo',
     },
   });
 }
