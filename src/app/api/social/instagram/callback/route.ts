@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateCsrfToken, getSupabaseAdmin } from '@/lib/auth';
 
 // Callback do Instagram/Facebook OAuth
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
-  const state = searchParams.get('state'); // Contém user_id
+  const state = searchParams.get('state'); // CSRF token containing userId
 
   if (error) {
     return NextResponse.redirect(
@@ -20,7 +21,32 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Validate CSRF token
+  const userId = validateCsrfToken(state);
+  if (!userId) {
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?error=invalid_state`
+    );
+  }
+
   try {
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // Get user's agency_id
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('agency_id')
+      .eq('id', userId)
+      .single();
+
+    if (!profile?.agency_id) {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?error=no_agency`
+      );
+    }
+
+    const agencyId = profile.agency_id;
+
     // Trocar code por access_token
     const tokenResponse = await fetch(
       `https://graph.facebook.com/v18.0/oauth/access_token?` +
@@ -55,8 +81,6 @@ export async function GET(request: NextRequest) {
     const pagesData = await pagesResponse.json();
 
     // Para cada página, buscar conta do Instagram conectada
-    const supabase = await createClient();
-
     for (const page of pagesData.data || []) {
       // Buscar Instagram Business Account conectado à página
       const igResponse = await fetch(
@@ -70,29 +94,29 @@ export async function GET(request: NextRequest) {
       if (igData.instagram_business_account) {
         const igAccount = igData.instagram_business_account;
 
-        // Salvar conta do Instagram no banco
-        await supabase
+        // Salvar conta do Instagram no banco (multi-tenant)
+        await supabaseAdmin
           .from('social_accounts')
           .upsert({
-            user_id: state,
+            agency_id: agencyId,
             platform: 'instagram',
             platform_user_id: igAccount.id,
             username: igAccount.username,
             display_name: igAccount.name,
             avatar_url: igAccount.profile_picture_url,
-            access_token: page.access_token, // Token da página para postar
-            token_expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 dias
+            access_token: page.access_token,
+            token_expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
             is_active: true,
           }, {
-            onConflict: 'user_id,platform,platform_user_id'
+            onConflict: 'agency_id,platform,platform_user_id'
           });
       }
 
       // Também salvar página do Facebook
-      await supabase
+      await supabaseAdmin
         .from('social_accounts')
         .upsert({
-          user_id: state,
+          agency_id: agencyId,
           platform: 'facebook',
           platform_user_id: page.id,
           username: page.name,
@@ -101,7 +125,7 @@ export async function GET(request: NextRequest) {
           token_expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           is_active: true,
         }, {
-          onConflict: 'user_id,platform,platform_user_id'
+          onConflict: 'agency_id,platform,platform_user_id'
         });
     }
 

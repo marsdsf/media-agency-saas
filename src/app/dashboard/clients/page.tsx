@@ -11,88 +11,33 @@ import {
   Facebook, 
   Twitter,
   ExternalLink,
-  Mail,
-  Phone,
   Calendar,
   BarChart3,
-  Edit2,
-  Trash2,
   UserPlus,
   Send,
   Check,
   X,
-  Building2
+  Building2,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
-
-// Mock clients data
-const mockClients = [
-  {
-    id: '1',
-    name: 'Fashion Style',
-    email: 'contato@fashionstyle.com.br',
-    phone: '(11) 99999-1234',
-    website: 'fashionstyle.com.br',
-    logo: 'FS',
-    color: '#8B5CF6',
-    socialAccounts: [
-      { platform: 'instagram', username: '@fashionstyle', followers: 45000 },
-      { platform: 'facebook', username: 'fashionstyle', followers: 12000 },
-    ],
-    postsThisMonth: 24,
-    pendingApproval: 3,
-    portalAccess: true,
-    createdAt: '2023-10-15',
-  },
-  {
-    id: '2',
-    name: 'Café Aroma',
-    email: 'marketing@cafearoma.com',
-    phone: '(11) 98888-5678',
-    website: 'cafearoma.com',
-    logo: 'CA',
-    color: '#EC4899',
-    socialAccounts: [
-      { platform: 'instagram', username: '@cafearoma', followers: 28000 },
-      { platform: 'tiktok', username: '@cafearoma', followers: 15000 },
-    ],
-    postsThisMonth: 18,
-    pendingApproval: 0,
-    portalAccess: true,
-    createdAt: '2023-11-20',
-  },
-  {
-    id: '3',
-    name: 'Tech Solutions',
-    email: 'social@techsolutions.io',
-    phone: '(11) 97777-9012',
-    website: 'techsolutions.io',
-    logo: 'TS',
-    color: '#06B6D4',
-    socialAccounts: [
-      { platform: 'linkedin', username: 'techsolutions', followers: 8500 },
-      { platform: 'twitter', username: '@techsolutions', followers: 5200 },
-    ],
-    postsThisMonth: 12,
-    pendingApproval: 5,
-    portalAccess: false,
-    createdAt: '2023-12-01',
-  },
-];
+import { Button, Card, Badge } from '@/lib/ui';
+import { useClients, useApiMutation } from '@/hooks/useApiData';
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState(mockClients);
+  const { data, loading, error, refetch } = useClients();
+  const createClient = useApiMutation('/api/clients', 'POST');
+  const clients = data?.clients ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewClientModal, setShowNewClientModal] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<typeof mockClients[0] | null>(null);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', website: '', industry: '' });
+  const [saving, setSaving] = useState(false);
   
-  const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const totalFollowers = clients.reduce((sum, client) => 
-    sum + client.socialAccounts.reduce((s, acc) => s + acc.followers, 0), 0
+  const filteredClients = clients.filter((client: any) =>
+    client.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getPlatformIcon = (platform: string) => {
@@ -103,6 +48,29 @@ export default function ClientsPage() {
       default: return Users;
     }
   };
+
+  const handleCreateClient = async () => {
+    if (!newClient.name.trim()) return;
+    setSaving(true);
+    try {
+      await createClient.mutate(newClient);
+      setShowNewClientModal(false);
+      setNewClient({ name: '', email: '', phone: '', website: '', industry: '' });
+      refetch();
+    } catch (e) {
+      // error shown via createClient.error
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -134,28 +102,35 @@ export default function ClientsPage() {
           <div className="flex items-center justify-between mb-3">
             <Users className="w-5 h-5 text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-white">{(totalFollowers / 1000).toFixed(1)}k</div>
-          <div className="text-sm text-gray-500">Seguidores totais</div>
+          <div className="text-2xl font-bold text-white">{clients.length}</div>
+          <div className="text-sm text-gray-500">Contas gerenciadas</div>
         </div>
         <div className="p-5 rounded-2xl bg-[#111] border border-[#1a1a1a]">
           <div className="flex items-center justify-between mb-3">
             <Calendar className="w-5 h-5 text-green-400" />
           </div>
           <div className="text-2xl font-bold text-white">
-            {clients.reduce((sum, c) => sum + c.postsThisMonth, 0)}
+            {clients.filter((c: any) => c.portal_access).length}
           </div>
-          <div className="text-sm text-gray-500">Posts este mês</div>
+          <div className="text-sm text-gray-500">Com portal ativo</div>
         </div>
         <div className="p-5 rounded-2xl bg-[#111] border border-[#1a1a1a]">
           <div className="flex items-center justify-between mb-3">
             <BarChart3 className="w-5 h-5 text-yellow-400" />
           </div>
           <div className="text-2xl font-bold text-white">
-            {clients.reduce((sum, c) => sum + c.pendingApproval, 0)}
+            {filteredClients.length}
           </div>
-          <div className="text-sm text-gray-500">Aguardando aprovação</div>
+          <div className="text-sm text-gray-500">Resultados da busca</div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <span className="text-red-400 text-sm">{error}</span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-6">
@@ -171,7 +146,9 @@ export default function ClientsPage() {
 
       {/* Clients Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClients.map((client) => (
+        {filteredClients.map((client: any) => {
+          const initials = client.name?.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase() || '??';
+          return (
           <div
             key={client.id}
             className="p-5 rounded-2xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all group"
@@ -180,13 +157,13 @@ export default function ClientsPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: client.color }}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold bg-gradient-to-br from-violet-600 to-purple-600"
                 >
-                  {client.logo}
+                  {initials}
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">{client.name}</h3>
+                  {client.website && (
                   <a 
                     href={`https://${client.website}`} 
                     target="_blank" 
@@ -195,6 +172,7 @@ export default function ClientsPage() {
                     {client.website}
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                  )}
                 </div>
               </div>
               <div className="relative">
@@ -204,40 +182,20 @@ export default function ClientsPage() {
               </div>
             </div>
 
-            {/* Social Accounts */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {client.socialAccounts.map((account, i) => {
-                const Icon = getPlatformIcon(account.platform);
-                return (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1a1a1a] text-sm"
-                  >
-                    <Icon className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-300">{(account.followers / 1000).toFixed(1)}k</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Stats */}
+            {/* Contact */}
             <div className="flex items-center gap-4 mb-4 text-sm">
-              <div className="flex items-center gap-1.5 text-gray-500">
-                <Calendar className="w-4 h-4" />
-                {client.postsThisMonth} posts
-              </div>
-              {client.pendingApproval > 0 && (
-                <div className="flex items-center gap-1.5 text-yellow-400">
-                  <div className="w-2 h-2 rounded-full bg-yellow-400" />
-                  {client.pendingApproval} pendentes
-                </div>
+              {client.email && (
+                <span className="text-gray-500 truncate">{client.email}</span>
+              )}
+              {client.industry && (
+                <Badge>{client.industry}</Badge>
               )}
             </div>
 
             {/* Portal Access */}
             <div className="flex items-center justify-between pt-4 border-t border-[#1a1a1a]">
               <div className="flex items-center gap-2">
-                {client.portalAccess ? (
+                {client.portal_access ? (
                   <span className="flex items-center gap-1.5 text-xs text-green-400">
                     <Check className="w-3 h-3" />
                     Portal ativo
@@ -260,16 +218,14 @@ export default function ClientsPage() {
                 >
                   <UserPlus className="w-4 h-4" />
                 </button>
-                <Link
-                  href={`/dashboard/clients/${client.id}`}
-                  className="px-3 py-1.5 rounded-lg bg-violet-600/10 text-violet-400 text-sm hover:bg-violet-600/20 transition-colors"
-                >
-                  Gerenciar
-                </Link>
+                <span className="px-3 py-1.5 rounded-lg bg-violet-600/10 text-violet-400 text-sm">
+                  {new Date(client.created_at).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                </span>
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* Add New Client Card */}
         <button
@@ -292,11 +248,18 @@ export default function ClientsPage() {
               <p className="text-sm text-gray-500">Adicione um novo cliente à sua agência</p>
             </div>
             <div className="p-6 space-y-4">
+              {createClient.error && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                  {createClient.error}
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Nome do cliente/empresa</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Nome do cliente/empresa *</label>
                 <input
                   type="text"
                   placeholder="Ex: Fashion Style"
+                  value={newClient.name}
+                  onChange={(e) => setNewClient(p => ({ ...p, name: e.target.value }))}
                   className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
                 />
               </div>
@@ -306,6 +269,8 @@ export default function ClientsPage() {
                   <input
                     type="email"
                     placeholder="contato@empresa.com"
+                    value={newClient.email}
+                    onChange={(e) => setNewClient(p => ({ ...p, email: e.target.value }))}
                     className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
@@ -314,23 +279,33 @@ export default function ClientsPage() {
                   <input
                     type="tel"
                     placeholder="(11) 99999-9999"
+                    value={newClient.phone}
+                    onChange={(e) => setNewClient(p => ({ ...p, phone: e.target.value }))}
                     className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Website</label>
-                <input
-                  type="url"
-                  placeholder="www.empresa.com.br"
-                  className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
-                />
-              </div>
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                <input type="checkbox" id="portal" className="w-4 h-4 rounded" defaultChecked />
-                <label htmlFor="portal" className="text-sm text-gray-300">
-                  Enviar convite para o Portal do Cliente
-                </label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Website</label>
+                  <input
+                    type="url"
+                    placeholder="www.empresa.com.br"
+                    value={newClient.website}
+                    onChange={(e) => setNewClient(p => ({ ...p, website: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Setor</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Moda, Food, Tech"
+                    value={newClient.industry}
+                    onChange={(e) => setNewClient(p => ({ ...p, industry: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl bg-[#0a0a0a] border border-[#222] text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500/50"
+                  />
+                </div>
               </div>
             </div>
             <div className="p-6 border-t border-[#1a1a1a] flex justify-end gap-3">
@@ -340,7 +315,12 @@ export default function ClientsPage() {
               >
                 Cancelar
               </button>
-              <button className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold transition-all">
+              <button
+                onClick={handleCreateClient}
+                disabled={saving || !newClient.name.trim()}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold transition-all disabled:opacity-50"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Criar Cliente
               </button>
             </div>

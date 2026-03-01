@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Calendar,
@@ -15,54 +15,69 @@ import {
   ChevronDown,
   FileText,
   BarChart3,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
 import { usePostsStore } from '@/lib/store';
-
-// Mock clients for selector
-const mockClients = [
-  { id: 'all', name: 'Todos os Clientes', logo: '📊' },
-  { id: '1', name: 'Fashion Style', logo: 'FS' },
-  { id: '2', name: 'Café Aroma', logo: 'CA' },
-  { id: '3', name: 'Tech Solutions', logo: 'TS' },
-];
-
-// Mock agency stats
-const agencyStats = {
-  totalClients: 12,
-  totalPosts: 156,
-  pendingApproval: 8,
-  publishedThisWeek: 34,
-  aiCreditsUsed: 4250,
-  aiCreditsLimit: 10000,
-};
+import { useClients, useProfile } from '@/hooks/useApiData';
 
 export default function DashboardPage() {
-  const { posts } = usePostsStore();
+  const { posts, fetchPosts } = usePostsStore();
+  const { data: clientsData, loading: clientsLoading } = useClients();
+  const { data: profileData, loading: profileLoading } = useProfile();
   const [isWelcome, setIsWelcome] = useState(false);
   const [selectedClient, setSelectedClient] = useState('all');
   const [showClientSelector, setShowClientSelector] = useState(false);
+
+  const clients = clientsData?.clients ?? [];
+  const agency = profileData?.agency;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setIsWelcome(params.get('welcome') === 'true');
   }, []);
 
-  const currentClient = mockClients.find(c => c.id === selectedClient);
+  useEffect(() => {
+    fetchPosts(selectedClient === 'all' ? undefined : selectedClient);
+  }, [selectedClient, fetchPosts]);
+
+  const selectorClients = useMemo(() => [
+    { id: 'all', name: 'Todos os Clientes', logo: '📊' },
+    ...clients.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      logo: c.name?.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase() || '??',
+    })),
+  ], [clients]);
+
+  const currentClient = selectorClients.find(c => c.id === selectedClient);
+
+  const pendingPosts = posts.filter(p => p.status === 'pending_approval');
+  const scheduledPosts = posts.filter(p => p.status === 'scheduled');
+  const draftPosts = posts.filter(p => p.status === 'draft');
+  const publishedThisWeek = posts.filter(p => {
+    if (p.status !== 'published') return false;
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return new Date(p.updatedAt) >= weekAgo;
+  });
+
+  const aiCreditsUsed = agency?.aiCreditsUsed ?? 0;
+  const aiCreditsLimit = agency?.aiCreditsLimit ?? 0;
 
   const stats = selectedClient === 'all'
     ? [
-        { label: 'Clientes Ativos', value: agencyStats.totalClients, icon: Building2, color: 'violet' },
-        { label: 'Posts Este Mês', value: agencyStats.totalPosts, icon: FileText, color: 'blue' },
-        { label: 'Aguardando Aprovação', value: agencyStats.pendingApproval, icon: Clock, color: 'yellow' },
-        { label: 'Publicados na Semana', value: agencyStats.publishedThisWeek, icon: CheckCircle, color: 'green' },
+        { label: 'Clientes Ativos', value: clients.length, icon: Building2, color: 'violet' },
+        { label: 'Posts Este Mês', value: posts.length, icon: FileText, color: 'blue' },
+        { label: 'Aguardando Aprovação', value: pendingPosts.length, icon: Clock, color: 'yellow' },
+        { label: 'Publicados na Semana', value: publishedThisWeek.length, icon: CheckCircle, color: 'green' },
       ]
     : [
-        { label: 'Posts Agendados', value: posts.filter(p => p.status === 'scheduled').length, icon: Calendar, color: 'violet' },
-        { label: 'Publicados Hoje', value: 0, icon: CheckCircle, color: 'green' },
-        { label: 'Rascunhos', value: posts.filter(p => p.status === 'draft').length, icon: Clock, color: 'yellow' },
-        { label: 'Engajamento', value: '+24%', icon: TrendingUp, color: 'blue' },
+        { label: 'Posts Agendados', value: scheduledPosts.length, icon: Calendar, color: 'violet' },
+        { label: 'Publicados', value: publishedThisWeek.length, icon: CheckCircle, color: 'green' },
+        { label: 'Rascunhos', value: draftPosts.length, icon: Clock, color: 'yellow' },
+        { label: 'Pendentes', value: pendingPosts.length, icon: TrendingUp, color: 'blue' },
       ];
 
   const colorClasses = {
@@ -77,10 +92,20 @@ export default function DashboardPage() {
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 5);
 
+  const isLoading = clientsLoading || profileLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
-      {isWelcome && (
+      {(isWelcome || clients.length === 0) && (
         <div className="p-6 rounded-2xl bg-gradient-to-r from-violet-600/20 to-purple-600/10 border border-violet-500/20">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-xl bg-violet-600">
@@ -129,7 +154,7 @@ export default function DashboardPage() {
 
             {showClientSelector && (
               <div className="absolute top-full left-0 mt-2 w-64 bg-[#111] border border-[#1a1a1a] rounded-xl shadow-2xl z-50 overflow-hidden">
-                {mockClients.map((client) => (
+                {selectorClients.map((client) => (
                   <button
                     key={client.id}
                     onClick={() => {
@@ -174,8 +199,8 @@ export default function DashboardPage() {
           <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-[#111] border border-[#1a1a1a]">
             <Zap className="w-4 h-4 text-violet-400" />
             <div className="text-sm">
-              <span className="text-white font-medium">{agencyStats.aiCreditsUsed.toLocaleString()}</span>
-              <span className="text-gray-500">/{agencyStats.aiCreditsLimit.toLocaleString()} créditos</span>
+              <span className="text-white font-medium">{aiCreditsUsed.toLocaleString()}</span>
+              <span className="text-gray-500">/{aiCreditsLimit.toLocaleString()} créditos</span>
             </div>
           </div>
 
@@ -215,7 +240,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-medium text-white">Clientes</h3>
-                  <p className="text-xs text-gray-500">{agencyStats.totalClients} ativos</p>
+                  <p className="text-xs text-gray-500">{clients.length} ativos</p>
                 </div>
               </div>
             </Card>
@@ -266,13 +291,13 @@ export default function DashboardPage() {
       )}
 
       {/* Pending Approvals */}
-      {selectedClient === 'all' && agencyStats.pendingApproval > 0 && (
+      {selectedClient === 'all' && pendingPosts.length > 0 && (
         <Card>
           <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
               <h2 className="text-lg font-semibold text-white">Aguardando Aprovação</h2>
-              <Badge variant="warning">{agencyStats.pendingApproval}</Badge>
+              <Badge variant="warning">{pendingPosts.length}</Badge>
             </div>
             <Link href="/dashboard/approvals">
               <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
@@ -281,22 +306,24 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="divide-y divide-[#1a1a1a]">
-            {[
-              { client: 'Fashion Style', post: 'Promoção de verão com desconto especial...', time: '2h atrás' },
-              { client: 'Café Aroma', post: 'Novo blend especial chegando na próxima...', time: '5h atrás' },
-              { client: 'Tech Solutions', post: 'Conheça nossa nova solução para...', time: '1 dia atrás' },
-            ].map((item, i) => (
-              <div key={i} className="p-4 hover:bg-white/5 transition-colors flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400 font-semibold">
-                  {item.client.split(' ').map(w => w[0]).join('')}
+            {pendingPosts.slice(0, 5).map((post) => {
+              const client = clients.find((c: any) => c.id === post.clientId);
+              const clientName = client?.name || 'Sem cliente';
+              return (
+                <div key={post.id} className="p-4 hover:bg-white/5 transition-colors flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400 font-semibold">
+                    {clientName.split(' ').map((w: string) => w[0]).join('').substring(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">{clientName}</p>
+                    <p className="text-sm text-gray-500 truncate">{post.content}</p>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {new Date(post.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{item.client}</p>
-                  <p className="text-sm text-gray-500 truncate">{item.post}</p>
-                </div>
-                <span className="text-xs text-gray-500">{item.time}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}

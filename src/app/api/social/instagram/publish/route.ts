@@ -1,31 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { useCredits } from '@/lib/credits';
 
 // Publicar no Instagram
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const ctx = await getUserContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = await createClient();
     const { accountId, caption, mediaUrl, mediaType = 'IMAGE' } = await request.json();
 
     // Verificar créditos
-    const creditResult = await useCredits(user.id, 'publish_now', 'Publicação no Instagram');
+    const creditResult = await useCredits(ctx.userId, 'publish_now', 'Publicação no Instagram');
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error }, { status: 402 });
     }
 
-    // Buscar conta social
+    // Buscar conta social (scoped to agency)
     const { data: account, error: accountError } = await supabase
       .from('social_accounts')
       .select('*')
       .eq('id', accountId)
-      .eq('user_id', user.id)
+      .eq('agency_id', ctx.agencyId)
       .single();
 
     if (accountError || !account) {

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getUserContext, generateCsrfToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  const ctx = await getUserContext();
+  if (!ctx) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
+
+  // Generate CSRF token with user context (prevents state injection)
+  const state = generateCsrfToken(ctx.userId);
 
   // Construir URL de autorização do Instagram/Facebook
   const scopes = [
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     `client_id=${process.env.META_APP_ID}` +
     `&redirect_uri=${encodeURIComponent(`${process.env.NEXT_PUBLIC_APP_URL}/api/social/instagram/callback`)}` +
     `&scope=${scopes}` +
-    `&state=${user.id}` +
+    `&state=${state}` +
     `&response_type=code`;
 
   return NextResponse.json({ url: authUrl });

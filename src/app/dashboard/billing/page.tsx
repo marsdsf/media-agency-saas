@@ -11,11 +11,13 @@ import {
   Download,
   Calendar,
   QrCode,
-  Landmark
+  Landmark,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { PLANS, formatPrice, type PaymentGateway } from '@/lib/payments';
+import { useAuth } from '@/hooks/useAuth';
 
 // Gateways de pagamento disponíveis
 const paymentGateways = [
@@ -54,22 +56,17 @@ const plans = PLANS.map((plan, index) => ({
   popular: index === 1,
 }));
 
-const invoices = [
-  { id: '1', date: '01/01/2026', amount: 497, status: 'paid', plan: 'Professional' },
-  { id: '2', date: '01/12/2025', amount: 497, status: 'paid', plan: 'Professional' },
-  { id: '3', date: '01/11/2025', amount: 497, status: 'paid', plan: 'Professional' },
-];
-
 export default function BillingPage() {
-  const [selectedPlan, setSelectedPlan] = useState('professional');
+  const { agency, user } = useAuth();
+  const [selectedPlan, setSelectedPlan] = useState(agency?.plan || 'starter');
   const [selectedGateway, setSelectedGateway] = useState<string>('pix');
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
 
-  const currentPlan = plans.find(p => p.id === 'professional');
+  const currentPlan = plans.find(p => p.id === (agency?.plan || 'starter'));
   const currentUsage = {
-    credits: 4250,
-    limit: 10000,
+    credits: agency?.ai_credits_used || 0,
+    limit: agency?.ai_credits_limit || 2000,
   };
 
   const handleSelectPlan = (planId: string) => {
@@ -95,8 +92,8 @@ export default function BillingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planId: selectedPlan,
-          agencyId: 'agency-id-here',
-          customerEmail: 'user@email.com',
+          agencyId: agency?.id,
+          customerEmail: user?.email,
           billingType: selectedGateway === 'pix' ? 'PIX' : 'CREDIT_CARD',
         }),
       });
@@ -300,31 +297,23 @@ export default function BillingPage() {
             <History className="w-5 h-5" />
             Histórico de Faturas
           </h2>
-          <Button variant="ghost" size="sm" leftIcon={<Download className="w-4 h-4" />}>
-            Exportar
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<Download className="w-4 h-4" />}
+            onClick={async () => {
+              const res = await fetch('/api/stripe/portal', { method: 'POST' });
+              const data = await res.json();
+              if (data.url) window.location.href = data.url;
+            }}
+          >
+            Ver no Portal
           </Button>
         </div>
-        <div className="divide-y divide-[#1a1a1a]">
-          {invoices.map((invoice) => (
-            <div key={invoice.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-[#1a1a1a] flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-white">{invoice.date}</p>
-                  <p className="text-sm text-gray-500">{invoice.plan}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-white font-medium">{formatPrice(invoice.amount)}</span>
-                <Badge variant="success">Pago</Badge>
-                <Button variant="ghost" size="sm">
-                  <Download className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+        <div className="p-8 text-center">
+          <History className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-400">Gerencie suas faturas pelo portal de pagamento</p>
+          <p className="text-sm text-gray-500 mt-1">Clique em &quot;Ver no Portal&quot; para acessar</p>
         </div>
       </Card>
 

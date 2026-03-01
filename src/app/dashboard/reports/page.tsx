@@ -19,38 +19,43 @@ import {
   Settings,
   Mail,
   FileDown,
-  Palette
+  Palette,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Select } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-
-interface Report {
-  id: string;
-  name: string;
-  client: string;
-  period: string;
-  createdAt: string;
-  status: 'ready' | 'generating' | 'scheduled';
-  type: 'weekly' | 'monthly' | 'custom';
-}
-
-const mockReports: Report[] = [
-  { id: '1', name: 'Relatório Semanal', client: 'TechStore Brasil', period: '06/01 - 12/01', createdAt: '2026-01-12', status: 'ready', type: 'weekly' },
-  { id: '2', name: 'Relatório Mensal Dezembro', client: 'StartupAI', period: 'Dezembro 2025', createdAt: '2026-01-02', status: 'ready', type: 'monthly' },
-  { id: '3', name: 'Relatório de Campanha', client: 'Moda Express', period: '01/12 - 31/12', createdAt: '2026-01-05', status: 'ready', type: 'custom' },
-  { id: '4', name: 'Relatório Semanal', client: 'Beach Club', period: '13/01 - 19/01', createdAt: '2026-01-13', status: 'scheduled', type: 'weekly' },
-];
-
-const reportMetrics = {
-  totalReach: 125840,
-  engagement: 8420,
-  followers: 1250,
-  posts: 24,
-};
+import { useReports, useClients, useApiMutation } from '@/hooks/useApiData';
 
 export default function ReportsPage() {
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const { data: reports, loading, refetch } = useReports();
+  const { data: clients } = useClients();
+  const createMutation = useApiMutation('/api/reports', 'POST');
+  const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [newReport, setNewReport] = useState({ name: '', clientId: '', type: 'weekly', period: '' });
+
+  const reportsList: any[] = reports || [];
+
+  const handleCreateReport = async () => {
+    if (!newReport.name || !newReport.clientId) return;
+    await createMutation.execute({
+      name: newReport.name,
+      client_id: newReport.clientId,
+      type: newReport.type,
+      period: newReport.period,
+    });
+    setNewReport({ name: '', clientId: '', type: 'weekly', period: '' });
+    setIsCreating(false);
+    refetch();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,7 +86,7 @@ export default function ReportsPage() {
             />
           </div>
 
-          {mockReports.map((report) => (
+          {reportsList.map((report: any) => (
             <Card
               key={report.id}
               className={cn(
@@ -96,16 +101,16 @@ export default function ReportsPage() {
                     <FileText className="w-5 h-5 text-black" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">{report.name}</h3>
-                    <p className="text-sm text-gray-400">{report.client}</p>
+                    <h3 className="font-semibold text-white">{report.name || report.title}</h3>
+                    <p className="text-sm text-gray-400">{report.clients?.name || 'Sem cliente'}</p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {report.period}
+                        {report.period || report.type}
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {new Date(report.createdAt).toLocaleDateString('pt-BR')}
+                        {report.created_at ? new Date(report.created_at).toLocaleDateString('pt-BR') : '-'}
                       </span>
                     </div>
                   </div>
@@ -118,7 +123,8 @@ export default function ReportsPage() {
                     }
                   >
                     {report.status === 'ready' ? 'Pronto' :
-                     report.status === 'generating' ? 'Gerando...' : 'Agendado'}
+                     report.status === 'generating' ? 'Gerando...' : report.status || 'Pronto'}
+                  </Badge>
                   </Badge>
                 </div>
               </div>
@@ -137,6 +143,15 @@ export default function ReportsPage() {
               </div>
             </Card>
           ))}
+          {reportsList.length === 0 && (
+            <div className="py-16 text-center">
+              <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">Nenhum relatório criado ainda</p>
+              <Button className="mt-4" onClick={() => setIsCreating(true)} leftIcon={<Plus className="w-4 h-4" />}>
+                Criar Primeiro Relatório
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Report Preview / Settings */}
@@ -144,38 +159,40 @@ export default function ReportsPage() {
           {/* Quick Stats */}
           <Card className="p-4">
             <h3 className="text-lg font-semibold text-white mb-4">Prévia do Relatório</h3>
-            <div className="space-y-4">
+            {selectedReport?.data ? (
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-[#0a0a0a]">
                   <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
                     <Eye className="w-4 h-4" />
                     Alcance
                   </div>
-                  <p className="text-xl font-bold text-white">{reportMetrics.totalReach.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-white">{(selectedReport.data.totalReach || 0).toLocaleString()}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-[#0a0a0a]">
                   <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
                     <Heart className="w-4 h-4" />
                     Engajamento
                   </div>
-                  <p className="text-xl font-bold text-white">{reportMetrics.engagement.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-white">{(selectedReport.data.engagement || 0).toLocaleString()}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-[#0a0a0a]">
                   <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
                     <Users className="w-4 h-4" />
                     Novos Seguidores
                   </div>
-                  <p className="text-xl font-bold text-white">+{reportMetrics.followers}</p>
+                  <p className="text-xl font-bold text-white">+{(selectedReport.data.followers || 0)}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-[#0a0a0a]">
                   <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
                     <FileText className="w-4 h-4" />
                     Posts
                   </div>
-                  <p className="text-xl font-bold text-white">{reportMetrics.posts}</p>
+                  <p className="text-xl font-bold text-white">{(selectedReport.data.posts || 0)}</p>
                 </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-gray-500 text-sm">Selecione um relatório para ver a prévia</p>
+            )}
           </Card>
 
           {/* Report Settings */}
@@ -213,25 +230,81 @@ export default function ReportsPage() {
           <Card className="p-4">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-white" />
-              <h3 className="text-lg font-semibold text-white">Agendamentos</h3>
+              <h3 className="text-lg font-semibold text-white">Resumo</h3>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Próximo relatório</span>
-                <span className="text-white">19/01/2026</span>
+                <span className="text-gray-400">Total de relatórios</span>
+                <span className="text-white">{reportsList.length}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Frequência</span>
-                <span className="text-white">Semanal</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Destinatário</span>
-                <span className="text-white">cliente@email.com</span>
+                <span className="text-gray-400">Formato</span>
+                <span className="text-white">PDF</span>
               </div>
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Create Report Modal */}
+      {isCreating && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Novo Relatório</h2>
+            <div className="space-y-4">
+              <Input
+                label="Nome"
+                placeholder="Relatório Semanal"
+                value={newReport.name}
+                onChange={(e) => setNewReport(r => ({ ...r, name: e.target.value }))}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Cliente</label>
+                <select
+                  value={newReport.clientId}
+                  onChange={(e) => setNewReport(r => ({ ...r, clientId: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white"
+                >
+                  <option value="">Selecione...</option>
+                  {(clients || []).map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
+                <select
+                  value={newReport.type}
+                  onChange={(e) => setNewReport(r => ({ ...r, type: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white"
+                >
+                  <option value="weekly">Semanal</option>
+                  <option value="monthly">Mensal</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </div>
+              <Input
+                label="Período"
+                placeholder="Ex: Janeiro 2026"
+                value={newReport.period}
+                onChange={(e) => setNewReport(r => ({ ...r, period: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="ghost" className="flex-1" onClick={() => setIsCreating(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleCreateReport}
+                disabled={!newReport.name || !newReport.clientId || createMutation.loading}
+              >
+                {createMutation.loading ? 'Criando...' : 'Criar Relatório'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

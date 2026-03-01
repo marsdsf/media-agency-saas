@@ -1,133 +1,183 @@
 import { createClient } from '@/lib/supabase/server';
-import { CREDIT_COSTS } from '@/lib/stripe';
+import { CREDIT_COSTS, type CreditAction } from '@/lib/plans';
 
-export type CreditAction = keyof typeof CREDIT_COSTS;
+export type { CreditAction };
 
-export async function useCredits(userId: string, action: CreditAction, description?: string) {
+// Helper to get agency_id for a user
+async function getUserAgencyId(userId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('profiles')
+    .select('agency_id')
+    .eq('id', userId)
+    .single();
+  return data?.agency_id || null;
+}
+
+// Deduct credits atomically (multi-tenant: uses agency credits)
+export async function deductCredits(
+  userId: string,
+  action: CreditAction,
+  description?: string
+): Promise<{
+  success: boolean;
+  error?: string;
+  creditsUsed?: number;
+  creditsRemaining?: number;
+  required?: number;
+  available?: number;
+}> {
   const supabase = await createClient();
   const cost = CREDIT_COSTS[action];
 
-  // Buscar créditos atuais
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('credits, credits_used')
-    .eq('id', userId)
-    .single();
-
-  if (profileError || !profile) {
-    return { success: false, error: 'Usuário não encontrado' };
+  // Get user's agency
+  const agencyId = await getUserAgencyId(userId);
+  if (!agencyId) {
+    return { success: false, error: 'Agência não encontrada' };
   }
 
-  // Verificar se tem créditos suficientes
-  if (profile.credits < cost) {
-    return { 
-      success: false, 
+  // Get agency credits info
+  const { data: agency, error: agencyError } = await supabase
+    .from('agencies')
+    .select('ai_credits_limit, ai_credits_used, plan')
+    .eq('id', agencyId)
+    .single();
+
+  if (agencyError || !agency) {
+    return { success: false, error: 'Agência não encontrada' };
+  }
+
+  const available = agency.ai_credits_limit === -1
+    ? Infinity
+    : agency.ai_credits_limit - agency.ai_credits_used;
+
+  // Check if enough credits
+  if (available < cost) {
+    return {
+      success: false,
       error: 'Créditos insuficientes',
       required: cost,
-      available: profile.credits
+      available: available === Infinity ? -1 : available,
     };
   }
 
-  // Deduzir créditos
-  const newCredits = profile.credits - cost;
-  const newCreditsUsed = profile.credits_used + cost;
+  // Atomic deduction via RPC
+  const { data: deducted, error: rpcError } = await supabase
+    .rpc('deduct_credits', {
+      p_agency_id: agencyId,
+      p_amount: cost,
+    });
 
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ 
-      credits: newCredits,
-      credits_used: newCreditsUsed
-    })
-    .eq('id', userId);
-
-  if (updateError) {
-    return { success: false, error: 'Erro ao atualizar créditos' };
+  if (rpcError || !deducted) {
+    return { success: false, error: 'Créditos insuficientes ou erro na dedução' };
   }
 
-  // Registrar transação
-  await supabase
+  const remaining = agency.ai_credits_limit === -1
+    ? -1
+    : agency.ai_credits_limit - (agency.ai_credits_used + cost);
+
+  // Record the transaction (non-blocking)
+  supabase
     .from('credit_transactions')
     .insert({
+      agency_id: agencyId,
       user_id: userId,
       amount: -cost,
       type: 'usage',
       action,
       description: description || `Uso: ${action}`,
-      balance_after: newCredits
-    });
+      balance_after: remaining === -1 ? null : remaining,
+    })
+    .then(() => {});
 
-  return { 
-    success: true, 
+  return {
+    success: true,
     creditsUsed: cost,
-    creditsRemaining: newCredits
+    creditsRemaining: remaining,
   };
 }
 
+// Add credits to agency
 export async function addCredits(
-  userId: string, 
-  amount: number, 
+  agencyId: string,
+  amount: number,
   type: 'purchase' | 'subscription' | 'bonus' | 'refund',
-  description?: string
-) {
+  description?: string,
+  userId?: string
+): Promise<{ success: boolean; error?: string; creditsTotal?: number }> {
   const supabase = await createClient();
 
-  // Buscar créditos atuais
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('credits')
-    .eq('id', userId)
+  // For subscription renewal, reset used credits
+  if (type === 'subscription') {
+    const { error } = await supabase
+      .from('agencies')
+      .update({ ai_credits_used: 0 })
+      .eq('id', agencyId);
+
+    if (error) {
+      return { success: false, error: 'Erro ao resetar créditos' };
+    }
+  }
+
+  // Get current state
+  const { data: agency } = await supabase
+    .from('agencies')
+    .select('ai_credits_limit, ai_credits_used')
+    .eq('id', agencyId)
     .single();
 
-  if (profileError || !profile) {
-    return { success: false, error: 'Usuário não encontrado' };
-  }
+  const remaining = agency
+    ? (agency.ai_credits_limit === -1 ? -1 : agency.ai_credits_limit - agency.ai_credits_used)
+    : 0;
 
-  const newCredits = profile.credits + amount;
-
-  // Atualizar créditos
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ credits: newCredits })
-    .eq('id', userId);
-
-  if (updateError) {
-    return { success: false, error: 'Erro ao adicionar créditos' };
-  }
-
-  // Registrar transação
+  // Record the transaction
   await supabase
     .from('credit_transactions')
     .insert({
-      user_id: userId,
+      agency_id: agencyId,
+      user_id: userId || null,
       amount,
       type,
       description: description || `${type}: ${amount} créditos`,
-      balance_after: newCredits
+      balance_after: remaining === -1 ? null : remaining,
     });
 
-  return { 
-    success: true, 
-    creditsAdded: amount,
-    creditsTotal: newCredits
+  return {
+    success: true,
+    creditsTotal: remaining,
   };
 }
 
-export async function getCreditsBalance(userId: string) {
+// Get credits balance for an agency
+export async function getCreditsBalance(agencyId: string) {
   const supabase = await createClient();
 
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('credits, credits_used, plan')
-    .eq('id', userId)
+  const { data: agency, error } = await supabase
+    .from('agencies')
+    .select('ai_credits_limit, ai_credits_used, plan')
+    .eq('id', agencyId)
     .single();
 
-  if (error || !profile) {
+  if (error || !agency) {
     return null;
   }
 
   return {
-    available: profile.credits,
-    used: profile.credits_used,
-    plan: profile.plan
+    limit: agency.ai_credits_limit,
+    used: agency.ai_credits_used,
+    available: agency.ai_credits_limit === -1
+      ? -1
+      : agency.ai_credits_limit - agency.ai_credits_used,
+    plan: agency.plan,
   };
 }
+
+// Get credits balance for a user (via their agency)
+export async function getUserCreditsBalance(userId: string) {
+  const agencyId = await getUserAgencyId(userId);
+  if (!agencyId) return null;
+  return getCreditsBalance(agencyId);
+}
+
+// Legacy alias for backward compatibility
+export const useCredits = deductCredits;

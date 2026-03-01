@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getUserContext } from '@/lib/auth';
 import { useCredits } from '@/lib/credits';
 import OpenAI from 'openai';
 
@@ -9,10 +9,8 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const ctx = await getUserContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
@@ -24,7 +22,7 @@ export async function POST(request: NextRequest) {
                    type === 'tiktok' ? 'generate_post' : 'generate_post';
 
     // Verificar e deduzir créditos
-    const creditResult = await useCredits(user.id, action, `Geração de ${type}`);
+    const creditResult = await useCredits(ctx.userId, action, `Geração de ${type}`);
     if (!creditResult.success) {
       return NextResponse.json(
         { error: creditResult.error, required: creditResult.required },

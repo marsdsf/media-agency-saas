@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, PLANS } from '@/lib/stripe';
+import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Não autorizado' },
-        { status: 401 }
-      );
+    const ctx = await getUserContext();
+    if (!ctx) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = await createClient();
     const { planId } = await request.json();
     const plan = PLANS[planId as keyof typeof PLANS];
 
@@ -24,29 +21,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar ou criar customer no Stripe
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('stripe_customer_id, email')
-      .eq('id', user.id)
+    // Buscar ou criar customer no Stripe via agency
+    const { data: agency } = await supabase
+      .from('agencies')
+      .select('stripe_customer_id, name')
+      .eq('id', ctx.agencyId)
       .single();
 
-    let customerId = profile?.stripe_customer_id;
+    let customerId = agency?.stripe_customer_id;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: user.email,
+        email: ctx.email,
+        name: agency?.name,
         metadata: {
-          supabase_user_id: user.id,
+          agency_id: ctx.agencyId,
+          supabase_user_id: ctx.userId,
         },
       });
       customerId = customer.id;
 
-      // Salvar customer_id no perfil
+      // Salvar customer_id na agência
       await supabase
-        .from('profiles')
+        .from('agencies')
         .update({ stripe_customer_id: customerId })
-        .eq('id', user.id);
+        .eq('id', ctx.agencyId);
     }
 
     // Criar sessão de checkout
@@ -63,7 +62,7 @@ export async function POST(request: NextRequest) {
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?canceled=true`,
       metadata: {
-        supabase_user_id: user.id,
+        agency_id: ctx.agencyId,
         plan_id: planId,
       },
     });

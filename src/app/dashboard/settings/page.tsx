@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User,
   Bell,
@@ -23,10 +23,13 @@ import {
   Mail,
   Smartphone,
   LogOut,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Tabs, Avatar } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useProfile, useSocialAccounts } from '@/hooks/useApiData';
+import { useAuth } from '@/hooks/useAuth';
 
 // Platform icon mapping (custom since some don't exist in lucide-react)
 const FaTiktok = () => (
@@ -35,12 +38,12 @@ const FaTiktok = () => (
   </svg>
 );
 
-const connectedPlatforms = [
-  { id: 'instagram', name: 'Instagram', icon: Instagram, connected: true, account: '@agenciamedia', color: 'text-white' },
-  { id: 'facebook', name: 'Facebook', icon: Facebook, connected: true, account: 'Agência Media', color: 'text-white' },
-  { id: 'twitter', name: 'Twitter/X', icon: Twitter, connected: false, account: null, color: 'text-gray-400' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, connected: true, account: 'Agência Media Co.', color: 'text-white' },
-  { id: 'tiktok', name: 'TikTok', icon: FaTiktok, connected: false, account: null, color: 'text-gray-400' },
+const platformDefs = [
+  { id: 'instagram', name: 'Instagram', icon: Instagram },
+  { id: 'facebook', name: 'Facebook', icon: Facebook },
+  { id: 'twitter', name: 'Twitter/X', icon: Twitter },
+  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin },
+  { id: 'tiktok', name: 'TikTok', icon: FaTiktok },
 ];
 
 const notificationSettings = [
@@ -55,23 +58,64 @@ const notificationSettings = [
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile');
   const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState({
-    name: 'Maria Silva',
-    email: 'maria@agenciamedia.com',
-    phone: '+55 11 98765-4321',
-    company: 'Agência Media',
-    website: 'https://agenciamedia.com',
+  const { data: profileData, loading: profileLoading } = useProfile();
+  const { data: socialAccounts } = useSocialAccounts();
+  const { profile: authProfile, agency, signOut } = useAuth();
+
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    company: '',
+    website: '',
     timezone: 'America/Sao_Paulo',
     language: 'pt-BR',
   });
+
+  useEffect(() => {
+    if (profileData) {
+      setProfileForm({
+        name: profileData.profile?.full_name || authProfile?.full_name || '',
+        email: profileData.profile?.email || '',
+        phone: profileData.profile?.phone || '',
+        company: agency?.name || '',
+        website: agency?.website || '',
+        timezone: profileData.profile?.timezone || 'America/Sao_Paulo',
+        language: 'pt-BR',
+      });
+    }
+  }, [profileData, authProfile, agency]);
+
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
   const [notifications, setNotifications] = useState(notificationSettings);
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: profileForm.name,
+          phone: profileForm.phone,
+          timezone: profileForm.timezone,
+        }),
+      });
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+    }
     setSaving(false);
   };
+
+  const connectedPlatforms = platformDefs.map(p => {
+    const account = (socialAccounts || []).find((a: any) => a.platform === p.id);
+    return {
+      ...p,
+      connected: !!account,
+      account: account?.username || account?.platform_username || null,
+      color: account ? 'text-white' : 'text-gray-400',
+    };
+  });
 
   const toggleNotification = (id: string) => {
     setNotifications(prev => 
@@ -129,27 +173,27 @@ export default function SettingsPage() {
           <Card className="p-6 md:col-span-1">
             <div className="text-center">
               <div className="relative inline-block">
-                <Avatar size="xl" name={profile.name} />
+                <Avatar size="xl" name={profileForm.name} />
                 <button className="absolute bottom-0 right-0 p-2 rounded-full bg-gradient-to-r from-white to-gray-200 text-black hover:from-gray-200 hover:to-white transition-colors shadow-lg shadow-white/10">
                   <Camera className="w-4 h-4" />
                 </button>
               </div>
-              <h3 className="text-lg font-semibold text-white mt-4">{profile.name}</h3>
-              <p className="text-gray-400 text-sm">{profile.email}</p>
-              <Badge variant="info" className="mt-2">Professional</Badge>
+              <h3 className="text-lg font-semibold text-white mt-4">{profileForm.name || 'Sem nome'}</h3>
+              <p className="text-gray-400 text-sm">{profileForm.email}</p>
+              <Badge variant="info" className="mt-2">{agency?.plan || 'Free'}</Badge>
             </div>
             <div className="mt-6 pt-6 border-t border-[#1a1a2e] space-y-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">Membro desde</span>
-                <span className="text-white">Jan 2025</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Posts criados</span>
-                <span className="text-white">247</span>
+                <span className="text-white">{authProfile?.created_at ? new Date(authProfile.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '-'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">Créditos usados</span>
-                <span className="text-white">12.450</span>
+                <span className="text-white">{(agency?.ai_credits_used || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Limite</span>
+                <span className="text-white">{(agency?.ai_credits_limit || 0).toLocaleString()}</span>
               </div>
             </div>
           </Card>
@@ -159,35 +203,35 @@ export default function SettingsPage() {
             <div className="grid md:grid-cols-2 gap-6">
               <Input 
                 label="Nome completo" 
-                value={profile.name}
-                onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
+                value={profileForm.name}
+                onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
               />
               <Input 
                 label="Email" 
                 type="email"
-                value={profile.email}
-                onChange={(e) => setProfile(p => ({ ...p, email: e.target.value }))}
+                value={profileForm.email}
+                disabled
               />
               <Input 
                 label="Telefone" 
-                value={profile.phone}
-                onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
               />
               <Input 
                 label="Empresa" 
-                value={profile.company}
-                onChange={(e) => setProfile(p => ({ ...p, company: e.target.value }))}
+                value={profileForm.company}
+                disabled
               />
               <Input 
                 label="Website" 
-                value={profile.website}
-                onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
+                value={profileForm.website}
+                disabled
               />
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Fuso Horário</label>
                 <select 
-                  value={profile.timezone}
-                  onChange={(e) => setProfile(p => ({ ...p, timezone: e.target.value }))}
+                  value={profileForm.timezone}
+                  onChange={(e) => setProfileForm(p => ({ ...p, timezone: e.target.value }))}
                   className="w-full px-4 py-2.5 rounded-xl bg-[#1a1a2e] border border-[#2a2a4a] text-white"
                 >
                   <option value="America/Sao_Paulo">São Paulo (GMT-3)</option>

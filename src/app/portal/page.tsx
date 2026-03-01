@@ -17,88 +17,91 @@ import {
   Download,
   Eye,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  Loader2
 } from 'lucide-react';
-
-// Mock data - em produção virá do Supabase
-const mockPosts = [
-  {
-    id: '1',
-    type: 'instagram',
-    content: 'Novo lançamento! Nossa coleção de verão chegou com peças exclusivas...',
-    image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=400',
-    scheduledFor: '2024-01-15T10:00:00',
-    status: 'pending_approval',
-    hashtags: ['#moda', '#verao2024', '#lancamento'],
-  },
-  {
-    id: '2',
-    type: 'facebook',
-    content: 'Promoção especial de fim de semana! 30% OFF em toda a loja...',
-    image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400',
-    scheduledFor: '2024-01-16T14:00:00',
-    status: 'pending_approval',
-    hashtags: ['#promocao', '#desconto'],
-  },
-  {
-    id: '3',
-    type: 'instagram',
-    content: 'Dica de estilo: como combinar as cores do momento...',
-    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
-    scheduledFor: '2024-01-17T18:00:00',
-    status: 'approved',
-    hashtags: ['#dica', '#estilo', '#moda'],
-  },
-];
-
-const mockReports = [
-  {
-    id: '1',
-    title: 'Relatório Mensal - Dezembro 2023',
-    createdAt: '2024-01-05',
-    metrics: { reach: 45000, engagement: 3.2, followers: 1250 },
-  },
-  {
-    id: '2',
-    title: 'Relatório Mensal - Novembro 2023',
-    createdAt: '2023-12-05',
-    metrics: { reach: 38000, engagement: 2.8, followers: 980 },
-  },
-];
 
 export default function ClientPortalPage() {
   const [activeTab, setActiveTab] = useState<'posts' | 'calendar' | 'reports' | 'messages'>('posts');
-  const [posts, setPosts] = useState(mockPosts);
-  const [selectedPost, setSelectedPost] = useState<typeof mockPosts[0] | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [selectedPost, setSelectedPost] = useState<any>(null);
   const [feedback, setFeedback] = useState('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [clientName, setClientName] = useState('');
+  const [agencyName, setAgencyName] = useState('');
   const router = useRouter();
-  // Removed useSearchParams to fix build
-  
-  // Get client info from token/session
-  const clientName = 'Loja Fashion Style';
-  const agencyName = 'Digital Plus Marketing';
+
+  useEffect(() => {
+    const loadPortalData = async () => {
+      try {
+        // Load client info
+        const infoRes = await fetch('/api/portal');
+        if (!infoRes.ok) {
+          router.push('/portal/login');
+          return;
+        }
+        const info = await infoRes.json();
+        setClientName(info.client?.name || info.client?.company || 'Cliente');
+        setAgencyName(info.agency?.name || 'Agência');
+
+        // Load posts
+        const postsRes = await fetch('/api/portal?section=posts');
+        const postsData = await postsRes.json();
+        setPosts(postsData.posts || []);
+
+        // Load reports
+        const reportsRes = await fetch('/api/portal?section=reports');
+        const reportsData = await reportsRes.json();
+        setReports(reportsData.reports || []);
+      } catch (err) {
+        console.error('Portal load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPortalData();
+  }, [router]);
 
   const pendingPosts = posts.filter(p => p.status === 'pending_approval');
   const approvedPosts = posts.filter(p => p.status === 'approved');
 
-  const handleApprove = (postId: string) => {
-    setPosts(posts.map(p => 
-      p.id === postId ? { ...p, status: 'approved' } : p
-    ));
-    setSelectedPost(null);
+  const handleApprove = async (postId: string) => {
+    try {
+      await fetch('/api/portal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, action: 'approve' }),
+      });
+      setPosts(posts.map(p => 
+        p.id === postId ? { ...p, status: 'approved' } : p
+      ));
+      setSelectedPost(null);
+    } catch (err) {
+      console.error('Approve error:', err);
+    }
   };
 
-  const handleReject = (postId: string) => {
+  const handleReject = async (postId: string) => {
     if (!feedback.trim()) {
       alert('Por favor, explique o motivo da rejeição');
       return;
     }
-    setPosts(posts.map(p => 
-      p.id === postId ? { ...p, status: 'rejected' } : p
-    ));
-    setSelectedPost(null);
-    setFeedback('');
+    try {
+      await fetch('/api/portal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, action: 'reject', feedback }),
+      });
+      setPosts(posts.map(p => 
+        p.id === postId ? { ...p, status: 'rejected' } : p
+      ));
+      setSelectedPost(null);
+      setFeedback('');
+    } catch (err) {
+      console.error('Reject error:', err);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -130,6 +133,14 @@ export default function ClientPortalPage() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
@@ -137,7 +148,7 @@ export default function ClientPortalPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center">
-              <span className="text-white font-bold">FS</span>
+              <span className="text-white font-bold">{clientName ? clientName.substring(0, 2).toUpperCase() : 'CL'}</span>
             </div>
             <div>
               <h1 className="text-white font-semibold">{clientName}</h1>
@@ -337,35 +348,37 @@ export default function ClientPortalPage() {
         {/* Reports Tab */}
         {activeTab === 'reports' && (
           <div className="space-y-4">
-            {mockReports.map((report) => (
+            {reports.map((report) => (
               <div
                 key={report.id}
                 className="bg-[#111] border border-[#1a1a1a] rounded-2xl p-6 hover:border-violet-500/30 transition-all"
               >
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-white font-semibold">{report.title}</h3>
-                    <p className="text-sm text-gray-500">Criado em {new Date(report.createdAt).toLocaleDateString('pt-BR')}</p>
+                    <h3 className="text-white font-semibold">{report.title || report.name || 'Relatório'}</h3>
+                    <p className="text-sm text-gray-500">Criado em {new Date(report.created_at || report.createdAt).toLocaleDateString('pt-BR')}</p>
                   </div>
                   <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm transition-colors">
                     <Download className="w-4 h-4" />
                     Baixar PDF
                   </button>
                 </div>
+                {report.metrics && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 rounded-xl bg-[#0a0a0a]">
-                    <div className="text-2xl font-bold text-white">{(report.metrics.reach / 1000).toFixed(1)}k</div>
+                    <div className="text-2xl font-bold text-white">{((report.metrics.reach || 0) / 1000).toFixed(1)}k</div>
                     <div className="text-sm text-gray-500">Alcance</div>
                   </div>
                   <div className="p-4 rounded-xl bg-[#0a0a0a]">
-                    <div className="text-2xl font-bold text-white">{report.metrics.engagement}%</div>
+                    <div className="text-2xl font-bold text-white">{report.metrics.engagement || 0}%</div>
                     <div className="text-sm text-gray-500">Engajamento</div>
                   </div>
                   <div className="p-4 rounded-xl bg-[#0a0a0a]">
-                    <div className="text-2xl font-bold text-white">+{report.metrics.followers}</div>
+                    <div className="text-2xl font-bold text-white">+{report.metrics.followers || 0}</div>
                     <div className="text-sm text-gray-500">Novos seguidores</div>
                   </div>
                 </div>
+                )}
               </div>
             ))}
           </div>

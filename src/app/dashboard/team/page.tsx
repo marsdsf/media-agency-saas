@@ -21,21 +21,13 @@ import {
   UserPlus,
   UserMinus,
   Key,
-  Activity
+  Activity,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Switch } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  role: 'owner' | 'admin' | 'editor' | 'viewer';
-  status: 'active' | 'pending' | 'inactive';
-  lastActive: string;
-  projects: number;
-}
+import { useTeam, useApiMutation } from '@/hooks/useApiData';
 
 interface Permission {
   id: string;
@@ -43,14 +35,6 @@ interface Permission {
   description: string;
   roles: { owner: boolean; admin: boolean; editor: boolean; viewer: boolean };
 }
-
-const teamMembers: TeamMember[] = [
-  { id: '1', name: 'Você', email: 'voce@empresa.com', avatar: 'V', role: 'owner', status: 'active', lastActive: 'Agora', projects: 12 },
-  { id: '2', name: 'Ana Paula', email: 'ana@empresa.com', avatar: 'A', role: 'admin', status: 'active', lastActive: '5 min atrás', projects: 8 },
-  { id: '3', name: 'Carlos Silva', email: 'carlos@empresa.com', avatar: 'C', role: 'editor', status: 'active', lastActive: '1 hora atrás', projects: 5 },
-  { id: '4', name: 'Mariana Costa', email: 'mariana@empresa.com', avatar: 'M', role: 'editor', status: 'pending', lastActive: '-', projects: 0 },
-  { id: '5', name: 'Pedro Santos', email: 'pedro@freelancer.com', avatar: 'P', role: 'viewer', status: 'active', lastActive: '2 dias atrás', projects: 3 },
-];
 
 const permissions: Permission[] = [
   { id: '1', name: 'Criar Campanhas', description: 'Criar e publicar novas campanhas', roles: { owner: true, admin: true, editor: true, viewer: false } },
@@ -62,6 +46,9 @@ const permissions: Permission[] = [
 ];
 
 const roleConfig: Record<string, { label: string; color: string; icon: React.ComponentType<any> }> = {
+  agency_owner: { label: 'Proprietário', color: 'bg-amber-500/20 text-amber-400', icon: Crown },
+  agency_admin: { label: 'Admin', color: 'bg-purple-500/20 text-purple-400', icon: ShieldCheck },
+  agency_member: { label: 'Membro', color: 'bg-blue-500/20 text-blue-400', icon: Edit3 },
   owner: { label: 'Proprietário', color: 'bg-amber-500/20 text-amber-400', icon: Crown },
   admin: { label: 'Admin', color: 'bg-purple-500/20 text-purple-400', icon: ShieldCheck },
   editor: { label: 'Editor', color: 'bg-blue-500/20 text-blue-400', icon: Edit3 },
@@ -77,25 +64,58 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 export default function TeamPage() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'members' | 'permissions' | 'activity'>('members');
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('agency_member');
 
-  const filteredMembers = teamMembers.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.email.toLowerCase().includes(search.toLowerCase())
+  const { data: teamData, loading, error, refetch } = useTeam();
+  const inviteMutation = useApiMutation('/api/team', 'POST');
+  const removeMutation = useApiMutation('/api/team', 'DELETE');
+
+  const members = teamData?.members || [];
+  const invitations = teamData?.invitations || [];
+
+  const filteredMembers = members.filter((m: any) =>
+    (m.fullName || m.email || '').toLowerCase().includes(search.toLowerCase()) ||
+    (m.email || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const activeCount = members.length;
+  const pendingCount = invitations.length;
+
+  const handleInvite = async () => {
+    if (!inviteEmail) return;
+    await inviteMutation.execute({ email: inviteEmail, role: inviteRole });
+    setInviteEmail('');
+    setShowInvite(false);
+    refetch();
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!confirm('Remover este membro da equipe?')) return;
+    await removeMutation.execute({ memberId });
+    refetch();
+  };
+
+  const handleCancelInvite = async (invitationId: string) => {
+    await removeMutation.execute({ invitationId });
+    refetch();
+  };
+
   const stats = [
-    { label: 'Membros', value: '5', icon: Users },
-    { label: 'Ativos', value: '4', icon: Activity },
-    { label: 'Pendentes', value: '1', icon: Clock },
-    { label: 'Projetos', value: '12', icon: Shield },
+    { label: 'Membros', value: String(activeCount), icon: Users },
+    { label: 'Ativos', value: String(activeCount), icon: Activity },
+    { label: 'Pendentes', value: String(pendingCount), icon: Clock },
+    { label: 'Total', value: String(activeCount + pendingCount), icon: Shield },
   ];
 
-  const activityLogs = [
-    { user: 'Ana Paula', action: 'criou uma nova campanha', target: 'Lançamento Produto X', time: '5 min atrás' },
-    { user: 'Carlos Silva', action: 'editou o post', target: 'Promoção Black Friday', time: '1 hora atrás' },
-    { user: 'Você', action: 'convidou', target: 'Mariana Costa', time: '2 horas atrás' },
-    { user: 'Pedro Santos', action: 'visualizou relatório', target: 'Analytics Dezembro', time: '2 dias atrás' },
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -110,7 +130,7 @@ export default function TeamPage() {
           <Button variant="secondary" leftIcon={<Settings className="w-4 h-4" />}>
             Configurações
           </Button>
-          <Button leftIcon={<UserPlus className="w-4 h-4" />}>
+          <Button leftIcon={<UserPlus className="w-4 h-4" />} onClick={() => setShowInvite(true)}>
             Convidar Membro
           </Button>
         </div>
@@ -174,8 +194,12 @@ export default function TeamPage() {
 
           {/* Members List */}
           <div className="divide-y divide-[#1a1a1a]">
-            {filteredMembers.map((member) => {
-              const RoleIcon = roleConfig[member.role].icon;
+            {filteredMembers.map((member: any) => {
+              const role = member.role || 'viewer';
+              const roleCfg = roleConfig[role] || roleConfig.viewer;
+              const RoleIcon = roleCfg.icon;
+              const displayName = member.fullName || member.email;
+              const avatar = displayName.charAt(0).toUpperCase();
               return (
                 <div
                   key={member.id}
@@ -183,48 +207,81 @@ export default function TeamPage() {
                 >
                   <div className="relative">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 flex items-center justify-center text-black text-lg font-bold">
-                      {member.avatar}
+                      {member.avatarUrl ? (
+                        <img src={member.avatarUrl} alt={displayName} className="w-12 h-12 rounded-full object-cover" />
+                      ) : avatar}
                     </div>
-                    {member.status === 'active' && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#0a0a0a]" />
-                    )}
+                    <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#0a0a0a]" />
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-white">{member.name}</h4>
-                      {member.role === 'owner' && <Crown className="w-4 h-4 text-amber-400" />}
+                      <h4 className="font-medium text-white">{displayName}</h4>
+                      {role === 'agency_owner' && <Crown className="w-4 h-4 text-amber-400" />}
                     </div>
                     <p className="text-sm text-gray-500">{member.email}</p>
                   </div>
 
                   <div className="hidden md:flex items-center gap-6">
                     <div className="text-center">
-                      <p className="text-xs text-gray-500">Projetos</p>
-                      <p className="text-sm font-medium text-white">{member.projects}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-500">Último Acesso</p>
-                      <p className="text-sm text-white">{member.lastActive}</p>
+                      <p className="text-xs text-gray-500">Desde</p>
+                      <p className="text-sm text-white">{member.createdAt ? new Date(member.createdAt).toLocaleDateString('pt-BR') : '-'}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className={cn('text-xs px-2 py-1 rounded-full flex items-center gap-1', roleConfig[member.role].color)}>
+                    <span className={cn('text-xs px-2 py-1 rounded-full flex items-center gap-1', roleCfg.color)}>
                       <RoleIcon className="w-3 h-3" />
-                      {roleConfig[member.role].label}
+                      {roleCfg.label}
                     </span>
-                    <span className={cn('text-xs px-2 py-1 rounded-full', statusConfig[member.status].color)}>
-                      {statusConfig[member.status].label}
+                    <span className={cn('text-xs px-2 py-1 rounded-full', statusConfig.active.color)}>
+                      Ativo
                     </span>
                   </div>
 
-                  <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
+                  {role !== 'agency_owner' && (
+                    <button
+                      onClick={() => handleRemoveMember(member.id)}
+                      className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               );
             })}
+
+            {/* Pending Invitations */}
+            {invitations.map((inv: any) => (
+              <div key={inv.id} className="p-4 flex items-center gap-4 hover:bg-white/5 transition-all opacity-70">
+                <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-lg font-bold">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-white">{inv.email}</h4>
+                  <p className="text-sm text-gray-500">Convite pendente</p>
+                </div>
+                <span className={cn('text-xs px-2 py-1 rounded-full', statusConfig.pending.color)}>
+                  Pendente
+                </span>
+                <button
+                  onClick={() => handleCancelInvite(inv.id)}
+                  className="p-2 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+
+            {filteredMembers.length === 0 && invitations.length === 0 && (
+              <div className="p-12 text-center">
+                <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Nenhum membro encontrado</p>
+                <Button className="mt-4" onClick={() => setShowInvite(true)} leftIcon={<UserPlus className="w-4 h-4" />}>
+                  Convidar Primeiro Membro
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -291,24 +348,54 @@ export default function TeamPage() {
       {activeTab === 'activity' && (
         <Card className="p-4">
           <h3 className="font-semibold text-white mb-4">Atividade Recente</h3>
-          <div className="space-y-4">
-            {activityLogs.map((log, i) => (
-              <div key={i} className="flex items-start gap-4 p-3 rounded-lg hover:bg-white/5 transition-all">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-sm font-bold text-white">
-                  {log.user.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <p className="text-white">
-                    <span className="font-medium">{log.user}</span>
-                    {' '}{log.action}{' '}
-                    <span className="font-medium text-gray-300">{log.target}</span>
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">{log.time}</p>
-                </div>
-              </div>
-            ))}
+          <div className="py-12 text-center">
+            <Activity className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">Log de atividades será implementado em breve</p>
+            <p className="text-sm text-gray-500 mt-1">Acompanhe as ações da equipe em tempo real</p>
           </div>
         </Card>
+      )}
+
+      {/* Invite Modal */}
+      {showInvite && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Convidar Membro</h2>
+            <div className="space-y-4">
+              <Input
+                label="Email"
+                type="email"
+                placeholder="email@empresa.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Função</label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white"
+                >
+                  <option value="agency_admin">Admin</option>
+                  <option value="agency_member">Membro</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="ghost" className="flex-1" onClick={() => setShowInvite(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleInvite}
+                disabled={!inviteEmail || inviteMutation.loading}
+                leftIcon={inviteMutation.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              >
+                {inviteMutation.loading ? 'Enviando...' : 'Enviar Convite'}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );

@@ -20,50 +20,14 @@ import {
   ExternalLink,
   Cloud,
   HardDrive,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge, Input } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useMediaLibrary, useApiMutation } from '@/hooks/useApiData';
 
-interface MediaItem {
-  id: string;
-  name: string;
-  type: 'image' | 'video' | 'document';
-  size: string;
-  uploadedAt: string;
-  folder: string;
-  url: string;
-  tags: string[];
-  isFavorite: boolean;
-}
-
-interface Folder {
-  id: string;
-  name: string;
-  count: number;
-  color: string;
-}
-
-const folders: Folder[] = [
-  { id: 'all', name: 'Todos', count: 48, color: 'from-white to-gray-200' },
-  { id: 'products', name: 'Produtos', count: 15, color: 'from-gray-300 to-gray-500' },
-  { id: 'brand', name: 'Marca', count: 8, color: 'from-gray-400 to-gray-600' },
-  { id: 'social', name: 'Social', count: 20, color: 'from-gray-500 to-gray-700' },
-  { id: 'templates', name: 'Templates', count: 5, color: 'from-gray-600 to-gray-800' },
-];
-
-const mockMedia: MediaItem[] = [
-  { id: '1', name: 'produto-hero.jpg', type: 'image', size: '2.4 MB', uploadedAt: '2026-01-10', folder: 'products', url: '/placeholder.jpg', tags: ['produto', 'destaque'], isFavorite: true },
-  { id: '2', name: 'logo-branco.png', type: 'image', size: '156 KB', uploadedAt: '2026-01-08', folder: 'brand', url: '/placeholder.jpg', tags: ['logo', 'marca'], isFavorite: true },
-  { id: '3', name: 'video-promo.mp4', type: 'video', size: '45 MB', uploadedAt: '2026-01-09', folder: 'social', url: '/placeholder.jpg', tags: ['video', 'promo'], isFavorite: false },
-  { id: '4', name: 'banner-instagram.jpg', type: 'image', size: '1.8 MB', uploadedAt: '2026-01-11', folder: 'social', url: '/placeholder.jpg', tags: ['instagram', 'banner'], isFavorite: false },
-  { id: '5', name: 'carrossel-dicas.psd', type: 'document', size: '12 MB', uploadedAt: '2026-01-07', folder: 'templates', url: '/placeholder.jpg', tags: ['template', 'carrossel'], isFavorite: false },
-  { id: '6', name: 'mockup-celular.png', type: 'image', size: '3.2 MB', uploadedAt: '2026-01-06', folder: 'products', url: '/placeholder.jpg', tags: ['mockup', 'produto'], isFavorite: true },
-  { id: '7', name: 'story-template.png', type: 'image', size: '890 KB', uploadedAt: '2026-01-05', folder: 'templates', url: '/placeholder.jpg', tags: ['story', 'template'], isFavorite: false },
-  { id: '8', name: 'reels-behind.mp4', type: 'video', size: '28 MB', uploadedAt: '2026-01-04', folder: 'social', url: '/placeholder.jpg', tags: ['reels', 'bastidores'], isFavorite: false },
-];
-
-const typeIcons = {
+const typeIcons: Record<string, any> = {
   image: ImageIcon,
   video: Video,
   document: FileText,
@@ -71,15 +35,18 @@ const typeIcons = {
 
 export default function MediaPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [selectedFolder, setSelectedFolder] = useState('all');
+  const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredMedia = mockMedia.filter(item => {
-    const matchesFolder = selectedFolder === 'all' || item.folder === selectedFolder;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesFolder && matchesSearch;
+  const { data, loading, error, refetch } = useMediaLibrary(selectedType);
+  const deleteMedia = useApiMutation('/api/media', 'DELETE');
+  const mediaItems = data?.media ?? [];
+
+  const filteredMedia = mediaItems.filter((item: any) => {
+    if (!searchQuery) return true;
+    return item.file_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           item.tags?.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
   });
 
   const toggleSelection = (id: string) => {
@@ -88,8 +55,30 @@ export default function MediaPage() {
     );
   };
 
-  const storageUsed = 2.4;
-  const storageTotal = 10;
+  const handleDelete = async () => {
+    for (const id of selectedItems) {
+      try {
+        await deleteMedia.mutate({ id } as any);
+      } catch {}
+    }
+    setSelectedItems([]);
+    refetch();
+  };
+
+  const folders = [
+    { id: undefined, name: 'Todos', count: mediaItems.length },
+    { id: 'image', name: 'Imagens', count: mediaItems.filter((m: any) => m.type === 'image').length },
+    { id: 'video', name: 'Vídeos', count: mediaItems.filter((m: any) => m.type === 'video').length },
+    { id: 'document', name: 'Documentos', count: mediaItems.filter((m: any) => m.type === 'document').length },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -114,23 +103,20 @@ export default function MediaPage() {
         {/* Sidebar - Folders */}
         <div className="lg:col-span-1 space-y-4">
           <Card className="p-4">
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">PASTAS</h3>
+            <h3 className="text-sm font-semibold text-gray-400 mb-3">TIPO</h3>
             <div className="space-y-1">
               {folders.map((folder) => (
                 <button
-                  key={folder.id}
-                  onClick={() => setSelectedFolder(folder.id)}
+                  key={folder.id ?? 'all'}
+                  onClick={() => setSelectedType(folder.id)}
                   className={cn(
                     'w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all',
-                    selectedFolder === folder.id
+                    selectedType === folder.id
                       ? 'bg-white/10 text-white'
                       : 'text-gray-400 hover:bg-white/5 hover:text-white'
                   )}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={cn('w-3 h-3 rounded-sm bg-gradient-to-br', folder.color)} />
-                    <span className="text-sm font-medium">{folder.name}</span>
-                  </div>
+                  <span className="text-sm font-medium">{folder.name}</span>
                   <span className="text-xs text-gray-500">{folder.count}</span>
                 </button>
               ))}
@@ -229,7 +215,7 @@ export default function MediaPage() {
               <Button variant="ghost" size="sm" leftIcon={<Copy className="w-4 h-4" />}>
                 Copiar Link
               </Button>
-              <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} className="text-red-400 hover:text-red-300">
+              <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} className="text-red-400 hover:text-red-300" onClick={handleDelete}>
                 Excluir
               </Button>
             </div>
@@ -238,8 +224,8 @@ export default function MediaPage() {
           {/* Grid View */}
           {view === 'grid' && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredMedia.map((item) => {
-                const TypeIcon = typeIcons[item.type];
+              {filteredMedia.map((item: any) => {
+                const TypeIcon = typeIcons[item.type] || FileText;
                 return (
                   <div
                     key={item.id}
@@ -252,16 +238,13 @@ export default function MediaPage() {
                     )}
                   >
                     {/* Thumbnail */}
-                    <div className="aspect-square bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex items-center justify-center">
-                      <TypeIcon className="w-12 h-12 text-gray-600" />
+                    <div className="aspect-square bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                      {item.type === 'image' && item.url ? (
+                        <img src={item.url} alt={item.file_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <TypeIcon className="w-12 h-12 text-gray-600" />
+                      )}
                     </div>
-
-                    {/* Favorite */}
-                    {item.isFavorite && (
-                      <div className="absolute top-2 left-2">
-                        <Star className="w-4 h-4 text-white fill-white" />
-                      </div>
-                    )}
 
                     {/* Menu */}
                     <button className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -270,11 +253,11 @@ export default function MediaPage() {
 
                     {/* Info */}
                     <div className="p-3 bg-[#0a0a0a]">
-                      <p className="text-sm font-medium text-white truncate">{item.name}</p>
+                      <p className="text-sm font-medium text-white truncate">{item.file_name}</p>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-500">{item.size}</span>
+                        <span className="text-xs text-gray-500">{item.file_size ? `${(item.file_size / 1024 / 1024).toFixed(1)} MB` : ''}</span>
                         <div className="flex items-center gap-1">
-                          {item.tags.slice(0, 1).map((tag) => (
+                          {(item.tags || []).slice(0, 1).map((tag: string) => (
                             <span key={tag} className="text-xs px-1.5 py-0.5 rounded bg-white/10 text-gray-400">
                               {tag}
                             </span>
@@ -303,8 +286,8 @@ export default function MediaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMedia.map((item) => {
-                    const TypeIcon = typeIcons[item.type];
+                  {filteredMedia.map((item: any) => {
+                    const TypeIcon = typeIcons[item.type] || FileText;
                     return (
                       <tr
                         key={item.id}
@@ -319,22 +302,21 @@ export default function MediaPage() {
                             <div className="p-2 rounded-lg bg-white/5">
                               <TypeIcon className="w-4 h-4 text-gray-400" />
                             </div>
-                            <span className="text-white font-medium">{item.name}</span>
-                            {item.isFavorite && <Star className="w-3 h-3 text-white fill-white" />}
+                            <span className="text-white font-medium">{item.file_name}</span>
                           </div>
                         </td>
                         <td className="p-4 text-gray-400 capitalize">{item.type}</td>
-                        <td className="p-4 text-gray-400">{item.size}</td>
+                        <td className="p-4 text-gray-400">{item.file_size ? `${(item.file_size / 1024 / 1024).toFixed(1)} MB` : '-'}</td>
                         <td className="p-4">
                           <div className="flex gap-1">
-                            {item.tags.map((tag) => (
+                            {(item.tags || []).map((tag: string) => (
                               <span key={tag} className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-400">
                                 {tag}
                               </span>
                             ))}
                           </div>
                         </td>
-                        <td className="p-4 text-gray-400">{new Date(item.uploadedAt).toLocaleDateString('pt-BR')}</td>
+                        <td className="p-4 text-gray-400">{item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : '-'}</td>
                         <td className="p-4">
                           <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400">
                             <MoreVertical className="w-4 h-4" />

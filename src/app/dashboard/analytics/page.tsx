@@ -129,6 +129,15 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8">
+      {/* Demo Notice */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center gap-3">
+        <Zap className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+        <div>
+          <p className="text-sm text-yellow-200 font-medium">Modo de demonstração</p>
+          <p className="text-xs text-yellow-400/70">Analytics mostra dados de exemplo. Conecte suas redes sociais em Configurações para dados reais.</p>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between relative">
         <div className="absolute -top-4 -left-4 w-32 h-32 bg-white/5 rounded-full blur-3xl animate-pulse" />

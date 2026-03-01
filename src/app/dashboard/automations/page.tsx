@@ -6,113 +6,9 @@ import {
   Instagram, Facebook, Linkedin, Twitter, Youtube,
   TrendingUp, MessageSquare, Heart, Share2, Users,
   Calendar, Tag, Image, FileText, Bell, CheckCircle,
-  ArrowRight, Copy, Edit, MoreVertical, Sparkles
+  ArrowRight, Copy, Edit, MoreVertical, Sparkles, Loader2
 } from 'lucide-react';
-
-interface Automation {
-  id: string;
-  name: string;
-  description: string;
-  trigger: {
-    type: string;
-    conditions: Record<string, any>;
-  };
-  actions: {
-    type: string;
-    config: Record<string, any>;
-  }[];
-  isActive: boolean;
-  runsCount: number;
-  lastRun?: string;
-  createdAt: string;
-}
-
-const demoAutomations: Automation[] = [
-  {
-    id: '1',
-    name: 'Auto-resposta em comentários',
-    description: 'Responde automaticamente comentários com perguntas sobre preço',
-    trigger: {
-      type: 'new_comment',
-      conditions: { keywords: ['preço', 'valor', 'quanto custa'] }
-    },
-    actions: [
-      { type: 'reply_comment', config: { message: 'Olá! 😊 Enviamos os valores no seu DM!' } },
-      { type: 'send_dm', config: { template: 'price_list' } }
-    ],
-    isActive: true,
-    runsCount: 234,
-    lastRun: '2026-01-15T10:30:00',
-    createdAt: '2026-01-01T00:00:00'
-  },
-  {
-    id: '2',
-    name: 'Repost de Stories com menção',
-    description: 'Reposta automaticamente stories que mencionam a marca',
-    trigger: {
-      type: 'story_mention',
-      conditions: { accounts: ['@cliente1', '@cliente2'] }
-    },
-    actions: [
-      { type: 'repost_story', config: { addSticker: true } },
-      { type: 'send_dm', config: { message: 'Obrigado por compartilhar! ❤️' } }
-    ],
-    isActive: true,
-    runsCount: 89,
-    lastRun: '2026-01-15T09:15:00',
-    createdAt: '2026-01-05T00:00:00'
-  },
-  {
-    id: '3',
-    name: 'Evergreen Content Recycler',
-    description: 'Republica posts de sucesso automaticamente a cada 30 dias',
-    trigger: {
-      type: 'schedule',
-      conditions: { interval: '30d', minEngagement: 5 }
-    },
-    actions: [
-      { type: 'repost', config: { platforms: ['instagram', 'facebook'], varyCaption: true } }
-    ],
-    isActive: false,
-    runsCount: 12,
-    lastRun: '2026-01-10T14:00:00',
-    createdAt: '2025-12-15T00:00:00'
-  },
-  {
-    id: '4',
-    name: 'Novo seguidor → Mensagem de boas-vindas',
-    description: 'Envia DM personalizada para novos seguidores',
-    trigger: {
-      type: 'new_follower',
-      conditions: { minFollowers: 100 }
-    },
-    actions: [
-      { type: 'send_dm', config: { template: 'welcome', delay: '5m' } },
-      { type: 'add_to_list', config: { list: 'leads' } }
-    ],
-    isActive: true,
-    runsCount: 567,
-    lastRun: '2026-01-15T11:45:00',
-    createdAt: '2026-01-01T00:00:00'
-  },
-  {
-    id: '5',
-    name: 'Alerta de crise (comentários negativos)',
-    description: 'Notifica equipe quando detecta sentimento negativo',
-    trigger: {
-      type: 'sentiment_analysis',
-      conditions: { sentiment: 'negative', threshold: 0.7 }
-    },
-    actions: [
-      { type: 'notify_team', config: { channels: ['slack', 'email'] } },
-      { type: 'hide_comment', config: { autoHide: false } }
-    ],
-    isActive: true,
-    runsCount: 23,
-    lastRun: '2026-01-14T16:30:00',
-    createdAt: '2026-01-08T00:00:00'
-  }
-];
+import { useAutomations, useApiMutation } from '@/hooks/useApiData';
 
 const triggerTypes = [
   { id: 'new_comment', type: 'new_comment', name: 'Novo Comentário', icon: MessageSquare, color: 'bg-blue-500' },
@@ -139,18 +35,55 @@ const actionTypes = [
 ];
 
 export default function AutomationsPage() {
-  const [automations, setAutomations] = useState<Automation[]>(demoAutomations);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null);
+  const { data, loading, refetch } = useAutomations();
+  const createMutation = useApiMutation('/api/automations', 'POST');
+  const toggleMutation = useApiMutation('/api/automations', 'PATCH');
+  const deleteMutation = useApiMutation('/api/automations', 'DELETE');
 
-  const toggleAutomation = (id: string) => {
-    setAutomations(prev => prev.map(a => 
-      a.id === id ? { ...a, isActive: !a.isActive } : a
-    ));
+  const automations: any[] = data?.automations || [];
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedAutomation, setSelectedAutomation] = useState<any>(null);
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [selectedTrigger, setSelectedTrigger] = useState('');
+
+  const toggleAutomation = async (id: string, currentActive: boolean) => {
+    await toggleMutation.mutate({ id, isActive: !currentActive });
+    refetch();
   };
 
-  const totalRuns = automations.reduce((sum, a) => sum + a.runsCount, 0);
-  const activeCount = automations.filter(a => a.isActive).length;
+  const handleDelete = async (id: string) => {
+    await deleteMutation.mutate({ id });
+    refetch();
+  };
+
+  const handleCreate = async () => {
+    if (!newName || !selectedTrigger) return;
+    await createMutation.mutate({
+      name: newName,
+      description: newDesc,
+      triggerType: selectedTrigger,
+      triggerConfig: {},
+      actions: [],
+      isActive: false,
+    });
+    setNewName('');
+    setNewDesc('');
+    setSelectedTrigger('');
+    setShowCreateModal(false);
+    refetch();
+  };
+
+  const totalRuns = automations.reduce((sum, a) => sum + (a.runs_count || 0), 0);
+  const activeCount = automations.filter(a => a.is_active).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -258,15 +191,23 @@ export default function AutomationsPage() {
       {/* Automations List */}
       <div className="space-y-4">
         <h3 className="font-semibold text-white">Suas Automações</h3>
+        {automations.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <Zap className="w-10 h-10 mx-auto mb-3 opacity-50" />
+            <p>Nenhuma automação criada</p>
+            <p className="text-sm mt-1">Crie sua primeira automação para economizar tempo</p>
+          </div>
+        )}
         {automations.map((automation) => {
-          const trigger = triggerTypes.find(t => t.type === automation.trigger.type) || triggerTypes[0];
+          const trigger = triggerTypes.find(t => t.type === automation.trigger_type) || triggerTypes[0];
           const TriggerIcon = trigger.icon;
+          const actions = automation.actions || [];
           
           return (
             <div
               key={automation.id}
               className={`bg-[#1a1a1a] rounded-xl p-4 border transition-all ${
-                automation.isActive ? 'border-green-500/30' : 'border-[#333]'
+                automation.is_active ? 'border-green-500/30' : 'border-[#333]'
               }`}
             >
               <div className="flex items-start justify-between">
@@ -277,7 +218,7 @@ export default function AutomationsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="font-semibold text-white">{automation.name}</h4>
-                      {automation.isActive && (
+                      {automation.is_active && (
                         <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">
                           Ativa
                         </span>
@@ -290,12 +231,12 @@ export default function AutomationsPage() {
                       <span className="px-2 py-1 bg-[#252525] rounded text-xs text-gray-300">
                         {trigger.name}
                       </span>
-                      <ArrowRight className="w-4 h-4 text-gray-500" />
-                      {automation.actions.map((action, i) => {
-                        const actionType = actionTypes.find(a => a.id === action.type);
+                      {actions.length > 0 && <ArrowRight className="w-4 h-4 text-gray-500" />}
+                      {actions.map((action: any, i: number) => {
+                        const actionType = actionTypes.find(a => a.id === (action.type || action));
                         return (
                           <span key={i} className="px-2 py-1 bg-[#252525] rounded text-xs text-gray-300">
-                            {actionType?.name || action.type}
+                            {actionType?.name || action.type || action}
                           </span>
                         );
                       })}
@@ -303,10 +244,7 @@ export default function AutomationsPage() {
 
                     {/* Stats */}
                     <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-                      <span>{automation.runsCount} execuções</span>
-                      {automation.lastRun && (
-                        <span>Última: {new Date(automation.lastRun).toLocaleDateString('pt-BR')}</span>
-                      )}
+                      <span>Criado em {new Date(automation.created_at).toLocaleDateString('pt-BR')}</span>
                     </div>
                   </div>
                 </div>
@@ -314,22 +252,22 @@ export default function AutomationsPage() {
                 {/* Actions */}
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toggleAutomation(automation.id)}
+                    onClick={() => toggleAutomation(automation.id, automation.is_active)}
                     className={`p-2 rounded-lg transition-colors ${
-                      automation.isActive 
+                      automation.is_active 
                         ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
                         : 'bg-[#252525] text-gray-400 hover:text-white'
                     }`}
                   >
-                    {automation.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    {automation.is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   </button>
                   <button className="p-2 bg-[#252525] text-gray-400 rounded-lg hover:text-white transition-colors">
                     <Edit className="w-4 h-4" />
                   </button>
-                  <button className="p-2 bg-[#252525] text-gray-400 rounded-lg hover:text-white transition-colors">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button className="p-2 bg-[#252525] text-gray-400 rounded-lg hover:text-red-400 transition-colors">
+                  <button
+                    onClick={() => handleDelete(automation.id)}
+                    className="p-2 bg-[#252525] text-gray-400 rounded-lg hover:text-red-400 transition-colors"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -345,25 +283,50 @@ export default function AutomationsPage() {
           <div className="bg-[#1a1a1a] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[#333]">
               <h2 className="text-xl font-bold text-white">Nova Automação</h2>
-              <p className="text-gray-400 mt-1">Escolha um gatilho para começar</p>
+              <p className="text-gray-400 mt-1">Configure nome, descrição e gatilho</p>
             </div>
-            <div className="p-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">GATILHOS DISPONÍVEIS</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {triggerTypes.map((trigger) => {
-                  const Icon = trigger.icon;
-                  return (
-                    <button
-                      key={trigger.id}
-                      className="flex items-center gap-3 p-4 bg-[#252525] rounded-xl border border-[#333] hover:border-violet-500/50 transition-colors text-left"
-                    >
-                      <div className={`p-2 rounded-lg ${trigger.color}`}>
-                        <Icon className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="font-medium text-white">{trigger.name}</span>
-                    </button>
-                  );
-                })}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">Nome</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Ex: Auto-resposta em comentários"
+                  className="w-full bg-[#252525] border border-[#333] rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">Descrição</label>
+                <input
+                  type="text"
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="O que essa automação faz?"
+                  className="w-full bg-[#252525] border border-[#333] rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-400 mb-3">GATILHO</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {triggerTypes.map((trigger) => {
+                    const Icon = trigger.icon;
+                    return (
+                      <button
+                        key={trigger.id}
+                        onClick={() => setSelectedTrigger(trigger.type)}
+                        className={`flex items-center gap-3 p-4 bg-[#252525] rounded-xl border transition-colors text-left ${
+                          selectedTrigger === trigger.type ? 'border-violet-500' : 'border-[#333] hover:border-violet-500/50'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg ${trigger.color}`}>
+                          <Icon className="w-5 h-5 text-white" />
+                        </div>
+                        <span className="font-medium text-white">{trigger.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
             <div className="p-6 border-t border-[#333] flex justify-end gap-3">
@@ -372,6 +335,14 @@ export default function AutomationsPage() {
                 className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
               >
                 Cancelar
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={!newName || !selectedTrigger || createMutation.loading}
+                className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {createMutation.loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Criar Automação
               </button>
             </div>
           </div>

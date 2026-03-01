@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { 
   ChevronLeft,
   ChevronRight,
@@ -16,10 +17,13 @@ import {
   Grid3X3,
   List,
   Gift,
-  Star
+  Star,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useCalendarEvents } from '@/hooks/useApiData';
+import { usePostsStore } from '@/lib/store';
 
 const FaTiktok = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -43,68 +47,92 @@ const platformColors: Record<string, string> = {
   tiktok: 'bg-black',
 };
 
-interface ScheduledPost {
+interface CalendarPost {
   id: string;
   title: string;
   platform: string;
   time: string;
-  status: 'scheduled' | 'published' | 'draft';
+  status: string;
 }
 
 interface CalendarDay {
   date: number;
+  dateStr: string;
   isCurrentMonth: boolean;
   isToday: boolean;
-  posts: ScheduledPost[];
+  posts: CalendarPost[];
   holiday?: string;
 }
 
-const holidays: Record<string, string> = {
-  '2026-01-01': '🎉 Ano Novo',
-  '2026-02-14': '❤️ Dia dos Namorados',
-  '2026-02-16': '🎭 Carnaval',
-  '2026-02-17': '🎭 Carnaval',
-  '2026-03-08': '👩 Dia da Mulher',
-  '2026-04-03': '🐰 Sexta-feira Santa',
-  '2026-04-05': '🐰 Páscoa',
-  '2026-04-21': '🇧🇷 Tiradentes',
-  '2026-05-01': '👷 Dia do Trabalho',
-  '2026-05-10': '👩‍👧 Dia das Mães',
-  '2026-06-12': '❤️ Dia dos Namorados BR',
-  '2026-08-09': '👨‍👧 Dia dos Pais',
-  '2026-09-07': '🇧🇷 Independência',
-  '2026-10-12': '👧 Dia das Crianças',
-  '2026-11-02': '🕯️ Finados',
-  '2026-11-15': '🇧🇷 Proclamação da República',
-  '2026-11-27': '🦃 Black Friday',
-  '2026-12-25': '🎄 Natal',
-};
-
-const mockPosts: Record<string, ScheduledPost[]> = {
-  '2026-01-12': [
-    { id: '1', title: 'Post de lançamento', platform: 'instagram', time: '09:00', status: 'scheduled' },
-    { id: '2', title: 'Artigo LinkedIn', platform: 'linkedin', time: '14:00', status: 'scheduled' },
-  ],
-  '2026-01-13': [
-    { id: '3', title: 'Reels tutorial', platform: 'instagram', time: '18:00', status: 'scheduled' },
-  ],
-  '2026-01-14': [
-    { id: '4', title: 'Trend TikTok', platform: 'tiktok', time: '20:00', status: 'draft' },
-    { id: '5', title: 'Story interativo', platform: 'instagram', time: '12:00', status: 'scheduled' },
-    { id: '6', title: 'Post Facebook', platform: 'facebook', time: '10:00', status: 'scheduled' },
-  ],
-  '2026-01-15': [
-    { id: '7', title: 'Thread Twitter', platform: 'twitter', time: '11:00', status: 'scheduled' },
-  ],
-  '2026-01-18': [
-    { id: '8', title: 'Carrossel dicas', platform: 'instagram', time: '19:00', status: 'scheduled' },
-  ],
-};
+// Brazilian holidays (computed dynamically per year)
+function getHolidays(year: number): Record<string, string> {
+  return {
+    [`${year}-01-01`]: '🎉 Ano Novo',
+    [`${year}-03-08`]: '👩 Dia da Mulher',
+    [`${year}-04-21`]: '🇧🇷 Tiradentes',
+    [`${year}-05-01`]: '👷 Dia do Trabalho',
+    [`${year}-06-12`]: '❤️ Dia dos Namorados',
+    [`${year}-09-07`]: '🇧🇷 Independência',
+    [`${year}-10-12`]: '👧 Dia das Crianças',
+    [`${year}-11-02`]: '🕯️ Finados',
+    [`${year}-11-15`]: '🇧🇷 Proclamação da República',
+    [`${year}-12-25`]: '🎄 Natal',
+  };
+}
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 11));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'month' | 'week'>('month');
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
+  const { posts } = usePostsStore();
+
+  // Compute date range for the current month view
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const startDate = new Date(year, month, 1);
+  const endDate = new Date(year, month + 1, 0);
+  const startStr = startDate.toISOString().split('T')[0];
+  const endStr = endDate.toISOString().split('T')[0];
+
+  const { data: calendarData, loading } = useCalendarEvents(startStr, endStr);
+
+  const holidays = useMemo(() => getHolidays(year), [year]);
+
+  // Build a map of date → posts from both calendar events & posts store
+  const postsByDate = useMemo(() => {
+    const map: Record<string, CalendarPost[]> = {};
+
+    // From posts store (persisted posts)
+    posts.forEach(p => {
+      if (!p.scheduledAt) return;
+      const dateStr = new Date(p.scheduledAt).toISOString().split('T')[0];
+      if (!map[dateStr]) map[dateStr] = [];
+      map[dateStr].push({
+        id: p.id,
+        title: p.content?.substring(0, 40) || 'Sem título',
+        platform: p.platforms?.[0] || 'instagram',
+        time: new Date(p.scheduledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        status: p.status,
+      });
+    });
+
+    // From calendar API (calendar events)
+    if (calendarData?.events) {
+      calendarData.events.forEach((e: any) => {
+        const dateStr = new Date(e.event_date || e.start_date).toISOString().split('T')[0];
+        if (!map[dateStr]) map[dateStr] = [];
+        map[dateStr].push({
+          id: e.id,
+          title: e.title || 'Evento',
+          platform: e.platform || 'calendar',
+          time: e.start_time || '00:00',
+          status: e.status || 'scheduled',
+        });
+      });
+    }
+
+    return map;
+  }, [posts, calendarData]);
 
   const monthNames = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -114,45 +142,45 @@ export default function CalendarPage() {
   const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   const getDaysInMonth = (date: Date): CalendarDay[] => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
+    const yr = date.getFullYear();
+    const mo = date.getMonth();
+    const firstDay = new Date(yr, mo, 1);
+    const lastDay = new Date(yr, mo + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDay = firstDay.getDay();
 
     const days: CalendarDay[] = [];
     const today = new Date();
 
-    // Previous month days
-    const prevMonth = new Date(year, month, 0);
+    const prevMonth = new Date(yr, mo, 0);
     const prevMonthDays = prevMonth.getDate();
     for (let i = startingDay - 1; i >= 0; i--) {
       days.push({
         date: prevMonthDays - i,
+        dateStr: '',
         isCurrentMonth: false,
         isToday: false,
         posts: [],
       });
     }
 
-    // Current month days
     for (let i = 1; i <= daysInMonth; i++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const dateStr = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       days.push({
         date: i,
+        dateStr,
         isCurrentMonth: true,
-        isToday: today.getDate() === i && today.getMonth() === month && today.getFullYear() === year,
-        posts: mockPosts[dateStr] || [],
+        isToday: today.getDate() === i && today.getMonth() === mo && today.getFullYear() === yr,
+        posts: postsByDate[dateStr] || [],
         holiday: holidays[dateStr],
       });
     }
 
-    // Next month days
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       days.push({
         date: i,
+        dateStr: '',
         isCurrentMonth: false,
         isToday: false,
         posts: [],
@@ -175,6 +203,16 @@ export default function CalendarPage() {
   const upcomingHolidays = Object.entries(holidays)
     .filter(([date]) => new Date(date) >= new Date())
     .slice(0, 5);
+
+  // Stats from posts
+  const monthPosts = posts.filter(p => {
+    if (!p.scheduledAt) return false;
+    const d = new Date(p.scheduledAt);
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+  const scheduledCount = monthPosts.filter(p => p.status === 'scheduled').length;
+  const publishedCount = monthPosts.filter(p => p.status === 'published').length;
+  const draftCount = monthPosts.filter(p => p.status === 'draft').length;
 
   return (
     <div className="space-y-6">
@@ -362,15 +400,15 @@ export default function CalendarPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Posts agendados</span>
-                <span className="text-white font-semibold">12</span>
+                <span className="text-white font-semibold">{scheduledCount}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Posts publicados</span>
-                <span className="text-white font-semibold">8</span>
+                <span className="text-white font-semibold">{publishedCount}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Rascunhos</span>
-                <span className="text-white font-semibold">3</span>
+                <span className="text-white font-semibold">{draftCount}</span>
               </div>
             </div>
           </Card>

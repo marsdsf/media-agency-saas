@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { useCredits } from '@/lib/credits';
 import OpenAI from 'openai';
@@ -40,24 +41,23 @@ Responda em português brasileiro.`,
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const ctx = await getUserContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = await createClient();
     const { message, agentType = 'general', conversationId } = await request.json();
 
     // Verificar créditos
-    const creditResult = await useCredits(user.id, 'ai_chat', 'Chat com IA');
+    const creditResult = await useCredits(ctx.userId, 'ai_chat', 'Chat com IA');
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error }, { status: 402 });
     }
 
     const agent = AGENTS[agentType as keyof typeof AGENTS] || AGENTS.general;
 
-    // Buscar histórico da conversa
+    // Buscar histórico da conversa (scoped to agency)
     let messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [];
 
     if (conversationId) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         .from('ai_conversations')
         .select('messages')
         .eq('id', conversationId)
-        .eq('user_id', user.id)
+        .eq('agency_id', ctx.agencyId)
         .single();
 
       if (conversation) {
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     // Adicionar system prompt e nova mensagem
     const fullMessages = [
       { role: 'system' as const, content: agent.systemPrompt },
-      ...messages.slice(-10), // Últimas 10 mensagens para contexto
+      ...messages.slice(-10),
       { role: 'user' as const, content: message },
     ];
 
@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
       const { data: newConv } = await supabase
         .from('ai_conversations')
         .insert({
-          user_id: user.id,
+          agency_id: ctx.agencyId,
+          user_id: ctx.userId,
           agent_type: agentType,
           messages: newMessages,
         })

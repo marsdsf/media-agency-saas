@@ -104,70 +104,32 @@ export default function AgentsPage() {
     setIsGenerating(true);
     setResult('');
     
-    // Simulated AI generation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const responses: Record<string, string> = {
-      copywriter: `🚀 **Headline Principal:**
-"${prompt.slice(0, 30)}... que vai transformar seu negócio"
-
-**Variações:**
-1. "Descubra o segredo por trás de ${prompt.slice(0, 20)}..."
-2. "Por que milhares estão escolhendo ${prompt.slice(0, 20)}..."
-3. "A única coisa que você precisa saber sobre ${prompt.slice(0, 20)}..."
-
-**CTA Sugerido:**
-"Comece agora gratuitamente →"`,
-      
-      social: `📱 **Post para Instagram:**
-
-${prompt}
-
-✨ Dica: Use esse conteúdo para gerar engajamento!
-
-🔥 Hashtags sugeridas:
-#marketing #digitalmarketing #socialmedia #contentcreator #empreendedorismo #negociosdigitais #marketingdigital #dicas`,
-      
-      image: `🎨 **Prompt para DALL-E/Midjourney:**
-
-"Professional ${prompt}, modern minimalist style, soft gradient background in purple and blue tones, high quality, 4k, photorealistic lighting, clean composition, trending on Behance"
-
-**Variação Artística:**
-"Abstract interpretation of ${prompt}, vibrant colors, geometric shapes, digital art style, by Beeple"`,
-      
-      seo: `🔍 **Análise SEO:**
-
-**Palavra-chave principal:** "${prompt.split(' ').slice(0, 3).join(' ')}"
-
-**Meta Title (60 chars):**
-"${prompt.slice(0, 40)} | Guia Completo 2026"
-
-**Meta Description (155 chars):**
-"Descubra tudo sobre ${prompt.slice(0, 50)}. Dicas práticas, estratégias comprovadas e resultados reais. Acesse agora!"
-
-**Keywords secundárias:**
-- como fazer ${prompt.split(' ')[0]}
-- melhor ${prompt.split(' ')[0]}
-- ${prompt.split(' ')[0]} para iniciantes`,
-      
-      maestro: `📋 **Plano de Ação Completo:**
-
-**Briefing analisado:** ${prompt}
-
-**Workflow sugerido:**
-1. ✅ Copywriter → Criar textos base
-2. ✅ Image Creator → Gerar visuais
-3. ✅ Social Media → Adaptar para plataformas
-4. ✅ SEO → Otimizar para buscas
-
-**Prazo estimado:** 15 minutos
-**Créditos necessários:** 45
-
-Deseja iniciar o workflow completo?`,
-    };
-    
-    setResult(responses[selectedAgent.id] || 'Resultado gerado com sucesso!');
-    setIsGenerating(false);
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: selectedAgent.id,
+          prompt,
+          context: `Agente: ${selectedAgent.name}. ${selectedAgent.description}. Capacidades: ${selectedAgent.capabilities.join(', ')}.`,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setResult(data.content || data.result || 'Resultado gerado com sucesso!');
+    } catch (err) {
+      // Fallback to local templates on error
+      const fallback: Record<string, string> = {
+        copywriter: `🚀 **Headline Principal:**\n"${prompt.slice(0, 30)}... que vai transformar seu negócio"\n\n**CTA Sugerido:**\n"Comece agora →"`,
+        social: `📱 **Post para Instagram:**\n\n${prompt}\n\n#marketing #digitalmarketing #socialmedia`,
+        image: `🎨 **Prompt para geração:**\n\n"Professional ${prompt}, modern minimalist style, high quality, 4k"`,
+        seo: `🔍 **Palavra-chave:** "${prompt.split(' ').slice(0, 3).join(' ')}"\n\n**Meta Title:** "${prompt.slice(0, 40)} | Guia Completo"`,
+        maestro: `📋 **Plano:** ${prompt}\n\n1. Copywriter → Textos\n2. Image Creator → Visuais\n3. Social Media → Plataformas\n4. SEO → Otimização`,
+      };
+      setResult(fallback[selectedAgent.id] || 'Erro ao gerar. Tente novamente.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const copyToClipboard = () => {

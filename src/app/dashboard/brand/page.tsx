@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Palette,
   Type,
@@ -13,48 +13,28 @@ import {
   Check,
   Upload,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Textarea } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-
-interface BrandColor {
-  id: string;
-  name: string;
-  hex: string;
-  usage: string;
-}
-
-interface BrandFont {
-  id: string;
-  name: string;
-  style: string;
-  usage: string;
-}
-
-const brandColors: BrandColor[] = [
-  { id: '1', name: 'Primária', hex: '#FFFFFF', usage: 'Títulos, CTAs, elementos principais' },
-  { id: '2', name: 'Secundária', hex: '#1a1a1a', usage: 'Backgrounds, cards' },
-  { id: '3', name: 'Accent', hex: '#666666', usage: 'Textos secundários, ícones' },
-  { id: '4', name: 'Destaque', hex: '#333333', usage: 'Bordas, separadores' },
-];
-
-const brandFonts: BrandFont[] = [
-  { id: '1', name: 'Inter', style: 'Bold', usage: 'Títulos e headlines' },
-  { id: '2', name: 'Inter', style: 'Regular', usage: 'Textos de corpo' },
-  { id: '3', name: 'Inter', style: 'Light', usage: 'Legendas e notas' },
-];
-
-const brandAssets = [
-  { id: '1', name: 'Logo Principal', type: 'logo', format: 'SVG' },
-  { id: '2', name: 'Logo Branco', type: 'logo', format: 'PNG' },
-  { id: '3', name: 'Logo Preto', type: 'logo', format: 'PNG' },
-  { id: '4', name: 'Ícone', type: 'icon', format: 'SVG' },
-];
+import { useBrandAssets, useApiMutation } from '@/hooks/useApiData';
 
 export default function BrandKitPage() {
   const [copied, setCopied] = useState<string | null>(null);
-  const [toneOfVoice, setToneOfVoice] = useState(`Nossa marca é:
+
+  const { data: brandData, loading, refetch } = useBrandAssets();
+  const createMutation = useApiMutation('/api/brand', 'POST');
+  const deleteMutation = useApiMutation('/api/brand', 'DELETE');
+
+  const assets = brandData?.assets || [];
+
+  const brandColors = useMemo(() => assets.filter((a: any) => a.type === 'color'), [assets]);
+  const brandFonts = useMemo(() => assets.filter((a: any) => a.type === 'font'), [assets]);
+  const brandLogos = useMemo(() => assets.filter((a: any) => a.type === 'logo' || a.type === 'icon'), [assets]);
+  const guidelines = useMemo(() => assets.find((a: any) => a.type === 'guideline'), [assets]);
+
+  const [toneOfVoice, setToneOfVoice] = useState(guidelines?.value || `Nossa marca é:
 
 • Profissional mas acessível
 • Inovadora e tecnológica
@@ -71,6 +51,55 @@ Evitamos:
     setCopied(hex);
     setTimeout(() => setCopied(null), 2000);
   };
+
+  const handleAddColor = async () => {
+    await createMutation.execute({
+      type: 'color',
+      name: 'Nova Cor',
+      value: '#FFFFFF',
+      metadata: { usage: 'Defina o uso' },
+    });
+    refetch();
+  };
+
+  const handleAddFont = async () => {
+    await createMutation.execute({
+      type: 'font',
+      name: 'Inter',
+      value: 'Inter',
+      metadata: { style: 'Regular', usage: 'Textos' },
+    });
+    refetch();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Excluir este asset?')) return;
+    await deleteMutation.execute({ id });
+    refetch();
+  };
+
+  const handleSaveTone = async () => {
+    if (guidelines) {
+      // Update existing
+      const patchMutation = useApiMutation('/api/brand', 'PATCH');
+      await patchMutation.execute({ id: guidelines.id, value: toneOfVoice });
+    } else {
+      await createMutation.execute({
+        type: 'guideline',
+        name: 'Tom de Voz',
+        value: toneOfVoice,
+      });
+    }
+    refetch();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -94,41 +123,44 @@ Evitamos:
               <Palette className="w-5 h-5 text-white" />
               <h3 className="text-lg font-semibold text-white">Paleta de Cores</h3>
             </div>
-            <Button variant="ghost" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+            <Button variant="ghost" size="sm" leftIcon={<Plus className="w-4 h-4" />} onClick={handleAddColor}>
               Adicionar
             </Button>
           </div>
           <div className="space-y-4">
-            {brandColors.map((color) => (
+            {brandColors.map((color: any) => (
               <div key={color.id} className="group flex items-center gap-4 p-3 rounded-xl bg-[#0a0a0a] hover:bg-white/5 transition-all">
                 <div
                   className="w-12 h-12 rounded-xl border border-white/20 cursor-pointer hover:scale-105 transition-transform"
-                  style={{ backgroundColor: color.hex }}
-                  onClick={() => copyColor(color.hex)}
+                  style={{ backgroundColor: color.value }}
+                  onClick={() => copyColor(color.value)}
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="text-white font-medium">{color.name}</h4>
                     <button
-                      onClick={() => copyColor(color.hex)}
+                      onClick={() => copyColor(color.value)}
                       className="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1"
                     >
-                      {copied === color.hex ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {color.hex}
+                      {copied === color.value ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {color.value}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-500">{color.usage}</p>
+                  <p className="text-sm text-gray-500">{color.metadata?.usage || ''}</p>
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                   <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400">
                     <Edit className="w-4 h-4" />
                   </button>
-                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400">
+                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400" onClick={() => handleDelete(color.id)}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             ))}
+            {brandColors.length === 0 && (
+              <p className="text-gray-500 text-sm py-4 text-center">Nenhuma cor cadastrada. Clique em Adicionar.</p>
+            )}
           </div>
         </Card>
 
@@ -139,29 +171,32 @@ Evitamos:
               <Type className="w-5 h-5 text-white" />
               <h3 className="text-lg font-semibold text-white">Tipografia</h3>
             </div>
-            <Button variant="ghost" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+            <Button variant="ghost" size="sm" leftIcon={<Plus className="w-4 h-4" />} onClick={handleAddFont}>
               Adicionar
             </Button>
           </div>
           <div className="space-y-4">
-            {brandFonts.map((font) => (
+            {brandFonts.map((font: any) => (
               <div key={font.id} className="group flex items-center justify-between p-4 rounded-xl bg-[#0a0a0a] hover:bg-white/5 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center">
                     <span className="text-2xl font-bold text-white">Aa</span>
                   </div>
                   <div>
-                    <h4 className="text-white font-medium">{font.name} {font.style}</h4>
-                    <p className="text-sm text-gray-500">{font.usage}</p>
+                    <h4 className="text-white font-medium">{font.value || font.name} {font.metadata?.style || ''}</h4>
+                    <p className="text-sm text-gray-500">{font.metadata?.usage || ''}</p>
                   </div>
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400">
+                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400" onClick={() => handleDelete(font.id)}>
                     <Edit className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             ))}
+            {brandFonts.length === 0 && (
+              <p className="text-gray-500 text-sm py-4 text-center">Nenhuma fonte cadastrada.</p>
+            )}
           </div>
           
           {/* Font Preview */}
@@ -185,24 +220,37 @@ Evitamos:
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {brandAssets.map((asset) => (
+            {brandLogos.map((asset: any) => (
               <div key={asset.id} className="group p-4 rounded-xl bg-[#0a0a0a] hover:bg-white/5 transition-all cursor-pointer">
                 <div className="aspect-square rounded-xl bg-white/5 flex items-center justify-center mb-3">
-                  <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
-                    <span className="text-black text-2xl font-bold">M</span>
-                  </div>
+                  {asset.value ? (
+                    <img src={asset.value} alt={asset.name} className="max-w-full max-h-full object-contain p-2" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
+                      <span className="text-black text-2xl font-bold">M</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-white">{asset.name}</p>
-                    <p className="text-xs text-gray-500">{asset.format}</p>
+                    <p className="text-xs text-gray-500">{asset.metadata?.format || asset.type}</p>
                   </div>
-                  <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-white/10 text-gray-400">
-                    <Copy className="w-4 h-4" />
+                  <button
+                    onClick={() => handleDelete(asset.id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-white/10 text-gray-400"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             ))}
+            {brandLogos.length === 0 && (
+              <div className="col-span-2 text-center py-8">
+                <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">Nenhum logo cadastrado</p>
+              </div>
+            )}
           </div>
         </Card>
 

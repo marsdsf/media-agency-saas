@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Link,
   Plus,
@@ -25,10 +25,12 @@ import {
   Palette,
   BarChart2,
   QrCode,
-  Share2
+  Share2,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Switch } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useLinkPages, useApiMutation } from '@/hooks/useApiData';
 
 const FaTiktok = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -36,57 +38,96 @@ const FaTiktok = () => (
   </svg>
 );
 
-interface LinkItem {
-  id: string;
-  title: string;
-  url: string;
-  icon: React.ComponentType<any>;
-  clicks: number;
-  isActive: boolean;
-  type: 'link' | 'social' | 'contact';
-}
-
-const links: LinkItem[] = [
-  { id: '1', title: 'Nosso Site', url: 'https://empresa.com', icon: Globe, clicks: 1250, isActive: true, type: 'link' },
-  { id: '2', title: 'Loja Online', url: 'https://loja.empresa.com', icon: ShoppingBag, clicks: 890, isActive: true, type: 'link' },
-  { id: '3', title: 'Agende uma Consulta', url: 'https://calendly.com/empresa', icon: Calendar, clicks: 456, isActive: true, type: 'link' },
-  { id: '4', title: 'Último Vídeo', url: 'https://youtube.com/watch?v=...', icon: Youtube, clicks: 2100, isActive: true, type: 'link' },
-  { id: '5', title: 'Spotify Playlist', url: 'https://spotify.com/playlist/...', icon: Music, clicks: 320, isActive: false, type: 'link' },
-];
-
-const socialLinks = [
-  { id: 's1', platform: 'Instagram', username: '@empresa', icon: Instagram, isActive: true },
-  { id: 's2', platform: 'TikTok', username: '@empresa', icon: FaTiktok, isActive: true },
-  { id: 's3', platform: 'YouTube', username: 'Empresa', icon: Youtube, isActive: true },
-  { id: 's4', platform: 'Twitter', username: '@empresa', icon: Twitter, isActive: false },
-];
+const iconMap: Record<string, React.ComponentType<any>> = {
+  globe: Globe, shop: ShoppingBag, calendar: Calendar, youtube: Youtube,
+  music: Music, instagram: Instagram, tiktok: FaTiktok, twitter: Twitter,
+  mail: Mail, phone: Phone, link: Link,
+};
 
 const themes = [
-  { id: 1, name: 'Dark', bg: '#0a0a0a', accent: '#ffffff' },
-  { id: 2, name: 'Light', bg: '#ffffff', accent: '#000000' },
-  { id: 3, name: 'Gradient', bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', accent: '#ffffff' },
-  { id: 4, name: 'Neon', bg: '#0a0a0a', accent: '#00ff88' },
-  { id: 5, name: 'Sunset', bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', accent: '#ffffff' },
+  { id: 'dark', name: 'Dark', bg: '#0a0a0a', accent: '#ffffff' },
+  { id: 'light', name: 'Light', bg: '#ffffff', accent: '#000000' },
+  { id: 'gradient', name: 'Gradient', bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', accent: '#ffffff' },
+  { id: 'neon', name: 'Neon', bg: '#0a0a0a', accent: '#00ff88' },
+  { id: 'sunset', name: 'Sunset', bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', accent: '#ffffff' },
 ];
 
 export default function LinksPage() {
-  const [activeLinks, setActiveLinks] = useState(links);
-  const [selectedTheme, setSelectedTheme] = useState(1);
+  const { data, loading, refetch } = useLinkPages();
+  const createMutation = useApiMutation('/api/links', 'POST');
+  const updateMutation = useApiMutation('/api/links', 'PATCH');
+
+  const pages: any[] = data?.pages || [];
+  const currentPage = pages[0]; // Use first page
+
+  const [localLinks, setLocalLinks] = useState<any[]>([]);
+  const [selectedTheme, setSelectedTheme] = useState('dark');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newPageTitle, setNewPageTitle] = useState('');
+
+  useEffect(() => {
+    if (currentPage) {
+      setLocalLinks(currentPage.links || []);
+      setSelectedTheme(currentPage.theme || 'dark');
+    }
+  }, [currentPage]);
+
+  const socialLinks = currentPage?.social_links || {};
+
+  const toggleLink = (index: number) => {
+    const updated = [...localLinks];
+    updated[index] = { ...updated[index], isActive: !updated[index].isActive };
+    setLocalLinks(updated);
+    if (currentPage) {
+      updateMutation.mutate({ id: currentPage.id, links: updated });
+    }
+  };
+
+  const handleCreatePage = async () => {
+    if (!newPageTitle) return;
+    await createMutation.mutate({ title: newPageTitle, links: [] });
+    setNewPageTitle('');
+    setShowCreate(false);
+    refetch();
+  };
 
   const stats = [
-    { label: 'Visualizações', value: '12.5K', icon: Eye, trend: '+15%' },
-    { label: 'Cliques', value: '5.2K', icon: MousePointerClick, trend: '+22%' },
-    { label: 'CTR', value: '41.6%', icon: BarChart2, trend: '+5%' },
-    { label: 'Links Ativos', value: '4', icon: Link, trend: '' },
+    { label: 'Links Ativos', value: localLinks.filter(l => l.isActive !== false).length.toString(), icon: Link, trend: '' },
+    { label: 'Total Links', value: localLinks.length.toString(), icon: BarChart2, trend: '' },
   ];
 
-  const toggleLink = (id: string) => {
-    setActiveLinks(prev =>
-      prev.map(link =>
-        link.id === id ? { ...link, isActive: !link.isActive } : link
-      )
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
     );
-  };
+  }
+
+  if (!currentPage) {
+    return (
+      <div className="text-center py-16">
+        <Link className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-white mb-2">Nenhuma página de links</h2>
+        <p className="text-gray-400">Crie sua primeira página link-in-bio</p>
+        <div className="mt-4 flex items-center gap-2 justify-center">
+          <Input
+            placeholder="Título da página (ex: @empresa)"
+            value={newPageTitle}
+            onChange={(e) => setNewPageTitle(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button
+            onClick={handleCreatePage}
+            disabled={!newPageTitle || createMutation.loading}
+            leftIcon={createMutation.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          >
+            Criar
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -142,13 +183,21 @@ export default function LinksPage() {
             </div>
             
             <div className="space-y-3">
-              {activeLinks.map((link) => (
+              {localLinks.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Link className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum link adicionado</p>
+                </div>
+              )}
+              {localLinks.map((link, index) => {
+                const IconComp = iconMap[(link.icon || 'link').toLowerCase()] || Link;
+                return (
                 <div
-                  key={link.id}
+                  key={index}
                   className={cn(
                     'group p-4 rounded-xl transition-all duration-300',
                     'bg-[#0a0a0a] hover:bg-[#1a1a1a]',
-                    !link.isActive && 'opacity-50'
+                    link.isActive === false && 'opacity-50'
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -156,17 +205,17 @@ export default function LinksPage() {
                       <GripVertical className="w-4 h-4" />
                     </button>
                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
-                      <link.icon className="w-5 h-5 text-white" />
+                      <IconComp className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-white">{link.title}</h4>
+                      <h4 className="font-medium text-white">{link.title || 'Sem título'}</h4>
                       <p className="text-sm text-gray-500 truncate">{link.url}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm text-gray-400">{link.clicks} cliques</span>
+                      <span className="text-sm text-gray-400">{link.clicks || 0} cliques</span>
                       <Switch 
-                        checked={link.isActive}
-                        onCheckedChange={() => toggleLink(link.id)}
+                        checked={link.isActive !== false}
+                        onCheckedChange={() => toggleLink(index)}
                       />
                       <button className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all opacity-0 group-hover:opacity-100">
                         <Trash2 className="w-4 h-4" />
@@ -174,7 +223,7 @@ export default function LinksPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </Card>
 
@@ -187,20 +236,21 @@ export default function LinksPage() {
               </Button>
             </div>
             <div className="flex flex-wrap gap-3">
-              {socialLinks.map((social) => (
-                <div
-                  key={social.id}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-full transition-all',
-                    social.isActive
-                      ? 'bg-white/10 text-white'
-                      : 'bg-[#1a1a1a] text-gray-500'
-                  )}
-                >
-                  <social.icon className="w-4 h-4" />
-                  <span className="text-sm">{social.platform}</span>
-                </div>
-              ))}
+              {Object.entries(socialLinks).length === 0 && (
+                <p className="text-sm text-gray-500">Nenhuma rede social adicionada</p>
+              )}
+              {Object.entries(socialLinks).map(([platform, handle]) => {
+                const SocialIcon = iconMap[platform.toLowerCase()] || Globe;
+                return (
+                  <div
+                    key={platform}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white transition-all"
+                  >
+                    <SocialIcon className="w-4 h-4" />
+                    <span className="text-sm">{platform}</span>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -238,7 +288,7 @@ export default function LinksPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-white">Preview</h3>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">link.bio/empresa</span>
+              <span className="text-sm text-gray-400">link.bio/{currentPage.slug || 'empresa'}</span>
               <button className="p-1 hover:bg-white/10 rounded transition-all">
                 <Copy className="w-4 h-4 text-gray-400" />
               </button>
@@ -261,35 +311,41 @@ export default function LinksPage() {
                   {/* Profile */}
                   <div className="text-center mb-6">
                     <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-300 to-gray-500 mx-auto mb-3 flex items-center justify-center text-black text-2xl font-bold">
-                      E
+                      {(currentPage.title || 'E')[0].toUpperCase()}
                     </div>
-                    <h3 className="font-bold text-white">@empresa</h3>
-                    <p className="text-xs text-gray-400 mt-1">Marketing Digital & Criatividade</p>
+                    <h3 className="font-bold text-white">{currentPage.title || '@empresa'}</h3>
+                    <p className="text-xs text-gray-400 mt-1">{currentPage.bio || ''}</p>
                   </div>
 
                   {/* Social Icons */}
                   <div className="flex justify-center gap-3 mb-6">
-                    {socialLinks.filter(s => s.isActive).map((social) => (
-                      <div
-                        key={social.id}
-                        className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
-                      >
-                        <social.icon className="w-4 h-4 text-white" />
-                      </div>
-                    ))}
+                    {Object.entries(socialLinks).map(([platform]) => {
+                      const SIcon = iconMap[platform.toLowerCase()] || Globe;
+                      return (
+                        <div
+                          key={platform}
+                          className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
+                        >
+                          <SIcon className="w-4 h-4 text-white" />
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Links */}
                   <div className="space-y-3">
-                    {activeLinks.filter(l => l.isActive).map((link) => (
-                      <button
-                        key={link.id}
-                        className="w-full p-3 rounded-xl bg-white text-black font-medium text-sm flex items-center justify-center gap-2 hover:bg-gray-200 transition-all"
-                      >
-                        <link.icon className="w-4 h-4" />
-                        {link.title}
-                      </button>
-                    ))}
+                    {localLinks.filter(l => l.isActive !== false).map((link, i) => {
+                      const LIcon = iconMap[(link.icon || 'link').toLowerCase()] || Link;
+                      return (
+                        <button
+                          key={i}
+                          className="w-full p-3 rounded-xl bg-white text-black font-medium text-sm flex items-center justify-center gap-2 hover:bg-gray-200 transition-all"
+                        >
+                          <LIcon className="w-4 h-4" />
+                          {link.title}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

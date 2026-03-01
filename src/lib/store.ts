@@ -7,10 +7,12 @@ export interface ScheduledPost {
   content: string;
   platforms: Platform[];
   scheduledAt: string;
-  status: 'draft' | 'scheduled' | 'published' | 'failed';
+  status: 'draft' | 'pending_approval' | 'approved' | 'scheduled' | 'published' | 'failed' | 'rejected';
   media?: MediaItem[];
   hashtags: string[];
   campaign?: string;
+  clientId?: string;
+  aiGenerated?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,7 +24,7 @@ export interface MediaItem {
   thumbnail?: string;
 }
 
-export type Platform = 'instagram' | 'facebook' | 'twitter' | 'linkedin' | 'tiktok';
+export type Platform = 'instagram' | 'facebook' | 'twitter' | 'linkedin' | 'tiktok' | 'youtube' | 'pinterest';
 
 export interface Campaign {
   id: string;
@@ -40,6 +42,8 @@ interface User {
   avatar?: string;
   role?: string;
   agency_id?: string;
+  agency_name?: string;
+  plan?: string;
 }
 
 interface AuthState {
@@ -50,11 +54,12 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
+  refreshUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -77,10 +82,13 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: {
               id: data.user.id,
-              name: data.user.user_metadata?.name || data.user.email.split('@')[0],
+              name: data.profile?.full_name || data.user.user_metadata?.name || data.user.email.split('@')[0],
               email: data.user.email,
-              avatar: data.user.user_metadata?.avatar_url,
-              role: data.user.user_metadata?.role,
+              avatar: data.profile?.avatar_url || data.user.user_metadata?.avatar_url,
+              role: data.profile?.role || 'agency_member',
+              agency_id: data.profile?.agency_id,
+              agency_name: data.agency?.name,
+              plan: data.agency?.plan,
             },
             token: data.session?.access_token || 'authenticated',
             isAuthenticated: true,
@@ -102,134 +110,194 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => {
         set({ user, isAuthenticated: !!user });
       },
+      refreshUser: async () => {
+        try {
+          const response = await fetch('/api/user/profile');
+          const data = await response.json();
+          if (data.profile) {
+            const current = get().user;
+            set({
+              user: {
+                ...current,
+                id: data.profile.id,
+                name: data.profile.fullName || current?.name || '',
+                email: data.profile.email || current?.email || '',
+                avatar: data.profile.avatarUrl,
+                role: data.profile.role,
+                agency_id: data.profile.agencyId,
+                agency_name: data.agency?.name,
+                plan: data.agency?.plan,
+              },
+            });
+          }
+        } catch (e) {
+          console.error('Refresh user error:', e);
+        }
+      },
     }),
     { name: 'auth-storage' }
   )
 );
 
-// Posts Store
+// Posts Store — syncs with API
 interface PostsState {
   posts: ScheduledPost[];
   campaigns: Campaign[];
   isLoading: boolean;
   selectedDate: Date | null;
   viewMode: 'calendar' | 'list' | 'kanban';
+  selectedClientId: string | null;
   
   // Actions
-  addPost: (post: Omit<ScheduledPost, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updatePost: (id: string, data: Partial<ScheduledPost>) => void;
-  deletePost: (id: string) => void;
+  fetchPosts: (clientId?: string) => Promise<void>;
+  addPost: (post: Omit<ScheduledPost, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updatePost: (id: string, data: Partial<ScheduledPost>) => Promise<void>;
+  deletePost: (id: string) => Promise<void>;
   duplicatePost: (id: string) => void;
   setSelectedDate: (date: Date | null) => void;
   setViewMode: (mode: 'calendar' | 'list' | 'kanban') => void;
+  setSelectedClientId: (id: string | null) => void;
   getPostsByDate: (date: Date) => ScheduledPost[];
   getPostsByPlatform: (platform: Platform) => ScheduledPost[];
   getPostsByCampaign: (campaignId: string) => ScheduledPost[];
 }
 
-// Demo posts
-const demoPosts: ScheduledPost[] = [
-  {
-    id: '1',
-    content: '🚀 Novidade incrível chegando! Prepare-se para revolucionar sua forma de trabalhar. #inovação #tecnologia #futuro',
-    platforms: ['instagram', 'facebook'],
-    scheduledAt: '2026-01-12T10:00:00',
-    status: 'scheduled',
-    hashtags: ['inovação', 'tecnologia', 'futuro'],
-    campaign: 'lancamento-produto',
-    createdAt: '2026-01-10T15:00:00',
-    updatedAt: '2026-01-10T15:00:00',
-  },
-  {
-    id: '2',
-    content: '💡 5 dicas para aumentar sua produtividade em 2026:\n\n1. Automatize tarefas repetitivas\n2. Use IA para criar conteúdo\n3. Organize seu calendário\n4. Defina prioridades claras\n5. Faça pausas estratégicas',
-    platforms: ['linkedin', 'twitter'],
-    scheduledAt: '2026-01-12T14:30:00',
-    status: 'scheduled',
-    hashtags: ['produtividade', 'dicas', '2026'],
-    createdAt: '2026-01-10T16:00:00',
-    updatedAt: '2026-01-10T16:00:00',
-  },
-  {
-    id: '3',
-    content: '✨ Black Friday chegou mais cedo! Descontos de até 70% em todos os planos. Use o cupom BLACKAI70',
-    platforms: ['instagram', 'facebook', 'twitter'],
-    scheduledAt: '2026-01-13T09:00:00',
-    status: 'scheduled',
-    hashtags: ['blackfriday', 'desconto', 'promocao'],
-    campaign: 'black-friday',
-    createdAt: '2026-01-11T10:00:00',
-    updatedAt: '2026-01-11T10:00:00',
-  },
-  {
-    id: '4',
-    content: 'Bastidores do nosso time em ação! 🎬 Veja como criamos conteúdo que engaja.',
-    platforms: ['instagram', 'tiktok'],
-    scheduledAt: '2026-01-14T18:00:00',
-    status: 'draft',
-    hashtags: ['bastidores', 'equipe', 'conteudo'],
-    createdAt: '2026-01-11T11:00:00',
-    updatedAt: '2026-01-11T11:00:00',
-  },
-];
-
-const demoCampaigns: Campaign[] = [
-  { id: 'lancamento-produto', name: 'Lançamento Produto X', color: '#8B5CF6', postsCount: 5 },
-  { id: 'black-friday', name: 'Black Friday 2026', color: '#F59E0B', postsCount: 12 },
-  { id: 'conteudo-educativo', name: 'Conteúdo Educativo', color: '#10B981', postsCount: 8 },
-];
-
 export const usePostsStore = create<PostsState>()(
   persist(
     (set, get) => ({
-      posts: demoPosts,
-      campaigns: demoCampaigns,
+      posts: [],
+      campaigns: [],
       isLoading: false,
       selectedDate: null,
       viewMode: 'calendar',
+      selectedClientId: null,
 
-      addPost: (postData) => {
-        const newPost: ScheduledPost = {
-          ...postData,
-          id: Date.now().toString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        set((state) => ({ posts: [...state.posts, newPost] }));
+      fetchPosts: async (clientId?: string) => {
+        set({ isLoading: true });
+        try {
+          const params = new URLSearchParams();
+          if (clientId) params.set('clientId', clientId);
+          const response = await fetch(`/api/posts?${params.toString()}`);
+          const data = await response.json();
+          if (data.posts) {
+            const mappedPosts: ScheduledPost[] = data.posts.map((p: any) => ({
+              id: p.id,
+              content: p.content || '',
+              platforms: [p.platform],
+              scheduledAt: p.scheduled_for || p.created_at,
+              status: p.status,
+              hashtags: p.hashtags || [],
+              campaign: p.campaign_id,
+              clientId: p.client_id,
+              aiGenerated: p.ai_generated,
+              createdAt: p.created_at,
+              updatedAt: p.updated_at,
+              media: (p.media_urls || []).map((url: string, i: number) => ({
+                id: `media-${i}`,
+                type: 'image' as const,
+                url,
+              })),
+            }));
+            set({ posts: mappedPosts });
+          }
+        } catch (error) {
+          console.error('Error fetching posts:', error);
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
-      updatePost: (id, data) => {
-        set((state) => ({
-          posts: state.posts.map((post) =>
-            post.id === id
-              ? { ...post, ...data, updatedAt: new Date().toISOString() }
-              : post
-          ),
-        }));
+      addPost: async (postData) => {
+        set({ isLoading: true });
+        try {
+          const response = await fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: postData.content,
+              platform: postData.platforms[0] || 'instagram',
+              hashtags: postData.hashtags,
+              scheduledFor: postData.scheduledAt || null,
+              status: postData.status || 'draft',
+              clientId: postData.clientId || null,
+              campaignId: postData.campaign || null,
+              mediaUrls: postData.media?.map(m => m.url) || [],
+              aiGenerated: postData.aiGenerated || false,
+            }),
+          });
+          const data = await response.json();
+          if (data.post) {
+            const newPost: ScheduledPost = {
+              ...postData,
+              id: data.post.id,
+              createdAt: data.post.created_at,
+              updatedAt: data.post.updated_at,
+            };
+            set((state) => ({ posts: [...state.posts, newPost] }));
+          }
+        } catch (error) {
+          console.error('Error adding post:', error);
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
-      deletePost: (id) => {
-        set((state) => ({
-          posts: state.posts.filter((post) => post.id !== id),
-        }));
+      updatePost: async (id, data) => {
+        try {
+          await fetch('/api/posts', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              content: data.content,
+              status: data.status,
+              hashtags: data.hashtags,
+              scheduledFor: data.scheduledAt,
+              mediaUrls: data.media?.map(m => m.url),
+            }),
+          });
+          set((state) => ({
+            posts: state.posts.map((post) =>
+              post.id === id
+                ? { ...post, ...data, updatedAt: new Date().toISOString() }
+                : post
+            ),
+          }));
+        } catch (error) {
+          console.error('Error updating post:', error);
+        }
+      },
+
+      deletePost: async (id) => {
+        try {
+          await fetch(`/api/posts?id=${id}`, { method: 'DELETE' });
+          set((state) => ({
+            posts: state.posts.filter((post) => post.id !== id),
+          }));
+        } catch (error) {
+          console.error('Error deleting post:', error);
+        }
       },
 
       duplicatePost: (id) => {
         const post = get().posts.find((p) => p.id === id);
         if (post) {
-          const newPost: ScheduledPost = {
-            ...post,
-            id: Date.now().toString(),
+          // Create a draft copy via API
+          get().addPost({
+            content: post.content,
+            platforms: post.platforms,
+            scheduledAt: '',
             status: 'draft',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          set((state) => ({ posts: [...state.posts, newPost] }));
+            hashtags: post.hashtags,
+            campaign: post.campaign,
+            clientId: post.clientId,
+          });
         }
       },
 
       setSelectedDate: (date) => set({ selectedDate: date }),
       setViewMode: (mode) => set({ viewMode: mode }),
+      setSelectedClientId: (id) => set({ selectedClientId: id }),
 
       getPostsByDate: (date) => {
         const dateStr = date.toISOString().split('T')[0];
@@ -249,3 +317,72 @@ export const usePostsStore = create<PostsState>()(
     { name: 'posts-storage' }
   )
 );
+
+// Notifications Store
+interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  message?: string;
+  actionUrl?: string;
+  read: boolean;
+  createdAt: string;
+}
+
+interface NotificationsState {
+  notifications: Notification[];
+  unreadCount: number;
+  fetchNotifications: () => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+}
+
+export const useNotificationsStore = create<NotificationsState>()((set, get) => ({
+  notifications: [],
+  unreadCount: 0,
+
+  fetchNotifications: async () => {
+    try {
+      const response = await fetch('/api/notifications');
+      const data = await response.json();
+      if (data.notifications) {
+        set({
+          notifications: data.notifications,
+          unreadCount: data.notifications.filter((n: Notification) => !n.read).length,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  },
+
+  markAsRead: async (id) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, read: true }),
+      });
+      set((state) => ({
+        notifications: state.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+        unreadCount: Math.max(0, state.unreadCount - 1),
+      }));
+    } catch (error) {
+      console.error('Error marking notification:', error);
+    }
+  },
+
+  markAllAsRead: async () => {
+    try {
+      await fetch('/api/notifications/read-all', { method: 'POST' });
+      set((state) => ({
+        notifications: state.notifications.map((n) => ({ ...n, read: true })),
+        unreadCount: 0,
+      }));
+    } catch (error) {
+      console.error('Error marking all notifications:', error);
+    }
+  },
+}));

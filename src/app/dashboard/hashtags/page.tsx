@@ -15,43 +15,13 @@ import {
   Zap,
   FolderPlus,
   Check,
-  RefreshCw
+  RefreshCw,
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { Button, Card, Badge, Input, Textarea } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-
-interface HashtagGroup {
-  id: string;
-  name: string;
-  hashtags: string[];
-  avgReach: number;
-  usageCount: number;
-}
-
-interface Hashtag {
-  tag: string;
-  posts: number;
-  trend: 'up' | 'down' | 'stable';
-  competition: 'low' | 'medium' | 'high';
-  score: number;
-}
-
-const hashtagGroups: HashtagGroup[] = [
-  { id: '1', name: 'Marketing Digital', hashtags: ['#marketingdigital', '#socialmedia', '#digitalmarketing', '#marketing', '#negocios'], avgReach: 45000, usageCount: 23 },
-  { id: '2', name: 'Empreendedorismo', hashtags: ['#empreendedorismo', '#empreender', '#negocios', '#sucesso', '#motivacao'], avgReach: 38000, usageCount: 18 },
-  { id: '3', name: 'Lifestyle', hashtags: ['#lifestyle', '#vida', '#qualidadedevida', '#rotina', '#dicas'], avgReach: 52000, usageCount: 31 },
-];
-
-const trendingHashtags: Hashtag[] = [
-  { tag: '#marketingdigital', posts: 2500000, trend: 'up', competition: 'high', score: 85 },
-  { tag: '#empreendedorismo', posts: 1800000, trend: 'up', competition: 'high', score: 82 },
-  { tag: '#negocios', posts: 1200000, trend: 'stable', competition: 'medium', score: 78 },
-  { tag: '#dicas', posts: 950000, trend: 'up', competition: 'medium', score: 75 },
-  { tag: '#motivacao', posts: 3200000, trend: 'stable', competition: 'high', score: 72 },
-  { tag: '#produtividade', posts: 450000, trend: 'up', competition: 'low', score: 88 },
-  { tag: '#crescimento', posts: 320000, trend: 'up', competition: 'low', score: 90 },
-  { tag: '#estrategia', posts: 180000, trend: 'up', competition: 'low', score: 92 },
-];
+import { useHashtagGroups, useApiMutation } from '@/hooks/useApiData';
 
 export default function HashtagsPage() {
   const [prompt, setPrompt] = useState('');
@@ -59,40 +29,54 @@ export default function HashtagsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [groupName, setGroupName] = useState('');
+
+  const { data, loading, refetch } = useHashtagGroups();
+  const createMutation = useApiMutation('/api/hashtags', 'POST');
+  const deleteMutation = useApiMutation('/api/hashtags', 'DELETE');
+
+  const hashtagGroups: any[] = data?.groups || [];
 
   const generateHashtags = async () => {
     if (!prompt) return;
     setIsGenerating(true);
     
-    // Simulated AI generation
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'hashtags',
+          prompt: `Gere 15 hashtags relevantes para: ${prompt}. Retorne apenas as hashtags separadas por vírgula, sem explicações.`,
+        }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        const tags = data.content
+          .split(/[,\n]/)
+          .map((t: string) => t.trim())
+          .filter((t: string) => t.startsWith('#'))
+          .slice(0, 15);
+        setGeneratedHashtags(tags.length > 0 ? tags : ['#' + prompt.split(' ')[0].toLowerCase()]);
+      }
+    } catch {
+      // Fallback to simple generation
+      setGeneratedHashtags([
+        '#' + prompt.split(' ')[0].toLowerCase(),
+        '#marketingdigital', '#socialmedia', '#digitalmarketing',
+        '#negocios', '#empreendedorismo', '#sucesso', '#dicas',
+        '#estrategia', '#crescimento', '#inovacao', '#produtividade',
+      ]);
+    }
     
-    const generated = [
-      '#' + prompt.split(' ')[0].toLowerCase(),
-      '#marketingdigital',
-      '#socialmedia',
-      '#digitalmarketing',
-      '#negocios',
-      '#empreendedorismo',
-      '#sucesso',
-      '#dicas',
-      '#estrategia',
-      '#crescimento',
-      '#inovacao',
-      '#tecnologia',
-      '#produtividade',
-      '#resultados',
-      '#brasil',
-    ];
-    
-    setGeneratedHashtags(generated);
     setIsGenerating(false);
   };
 
   const copyAll = () => {
-    const text = generatedHashtags.length > 0 
-      ? generatedHashtags.join(' ') 
-      : selectedHashtags.join(' ');
+    const text = selectedHashtags.length > 0 
+      ? selectedHashtags.join(' ') 
+      : generatedHashtags.join(' ');
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -104,10 +88,31 @@ export default function HashtagsPage() {
     );
   };
 
-  const competitionColors = {
-    low: 'text-emerald-400 bg-emerald-400/20',
-    medium: 'text-amber-400 bg-amber-400/20',
-    high: 'text-red-400 bg-red-400/20',
+  const handleSaveGroup = async () => {
+    if (!groupName || selectedHashtags.length === 0) return;
+    setSavingGroup(true);
+    try {
+      await createMutation.mutate({
+        name: groupName,
+        hashtags: selectedHashtags,
+      });
+      setGroupName('');
+      setSavingGroup(false);
+      refetch();
+    } catch {
+      setSavingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    await deleteMutation.mutate({ id });
+    refetch();
+  };
+
+  const copyGroupHashtags = (hashtags: string[]) => {
+    navigator.clipboard.writeText(hashtags.join(' '));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -177,48 +182,18 @@ export default function HashtagsPage() {
             )}
           </Card>
 
-          {/* Trending Hashtags */}
+          {/* Trending - Placeholder */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-white" />
                 <h3 className="text-lg font-semibold text-white">Hashtags em Alta</h3>
               </div>
-              <Button variant="ghost" size="sm">Ver mais</Button>
             </div>
-            <div className="space-y-3">
-              {trendingHashtags.map((hashtag) => (
-                <div
-                  key={hashtag.tag}
-                  onClick={() => toggleHashtag(hashtag.tag)}
-                  className={cn(
-                    'group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all',
-                    selectedHashtags.includes(hashtag.tag)
-                      ? 'bg-white/10 ring-1 ring-white/30'
-                      : 'bg-[#0a0a0a] hover:bg-white/5'
-                  )}
-                >
-                  <div className="flex items-center gap-4">
-                    <Hash className="w-4 h-4 text-gray-500" />
-                    <div>
-                      <p className="text-white font-medium">{hashtag.tag}</p>
-                      <p className="text-xs text-gray-500">{(hashtag.posts / 1000000).toFixed(1)}M posts</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className={cn('px-2 py-0.5 rounded text-xs font-medium', competitionColors[hashtag.competition])}>
-                      {hashtag.competition === 'low' ? 'Baixa' : hashtag.competition === 'medium' ? 'Média' : 'Alta'}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <BarChart3 className="w-3 h-3 text-gray-500" />
-                      <span className="text-sm text-white font-medium">{hashtag.score}</span>
-                    </div>
-                    {hashtag.trend === 'up' && (
-                      <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="text-center py-8">
+              <TrendingUp className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">Análise de hashtags em alta será implementada em breve.</p>
+              <p className="text-xs text-gray-500 mt-1">Requer integração com APIs das redes sociais.</p>
             </div>
           </Card>
         </div>
@@ -247,9 +222,26 @@ export default function HashtagsPage() {
                 <Button size="sm" className="flex-1" onClick={copyAll} leftIcon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}>
                   {copied ? 'Copiado!' : 'Copiar'}
                 </Button>
-                <Button variant="secondary" size="sm" leftIcon={<FolderPlus className="w-4 h-4" />}>
-                  Salvar
-                </Button>
+              </div>
+              {/* Save as group */}
+              <div className="mt-3 pt-3 border-t border-[#1a1a1a]">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nome do grupo"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    onClick={handleSaveGroup}
+                    disabled={!groupName || savingGroup}
+                    leftIcon={savingGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
+                  >
+                    Salvar
+                  </Button>
+                </div>
               </div>
             </Card>
           )}
@@ -258,10 +250,11 @@ export default function HashtagsPage() {
           <Card className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Grupos Salvos</h3>
-              <Button variant="ghost" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
-                Novo
-              </Button>
+              {loading && <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />}
             </div>
+            {hashtagGroups.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">Nenhum grupo salvo ainda</p>
+            ) : (
             <div className="space-y-3">
               {hashtagGroups.map((group) => (
                 <div
@@ -270,26 +263,31 @@ export default function HashtagsPage() {
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-white font-medium">{group.name}</h4>
-                    <button className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => copyGroupHashtags(group.hashtags || [])}>
+                        <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
+                      </button>
+                      <button onClick={() => handleDeleteGroup(group.id)}>
+                        <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-400" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mb-2 line-clamp-1">
-                    {group.hashtags.join(' ')}
+                    {(group.hashtags || []).join(' ')}
                   </p>
                   <div className="flex items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
-                      {(group.avgReach / 1000).toFixed(0)}K alcance
+                      <Hash className="w-3 h-3" />
+                      {(group.hashtags || []).length} hashtags
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Zap className="w-3 h-3" />
-                      {group.usageCount} usos
-                    </span>
+                    {group.category && (
+                      <span>{group.category}</span>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
+            )}
           </Card>
 
           {/* Tips */}

@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-// Listar contas sociais do usuário
+// Listar contas sociais da agência
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const ctx = await getUserContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = await createClient();
     const { data: accounts, error } = await supabase
       .from('social_accounts')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('agency_id', ctx.agencyId)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
       displayName: acc.display_name,
       avatarUrl: acc.avatar_url,
       isActive: acc.is_active,
+      clientId: acc.client_id,
       createdAt: acc.created_at,
     }));
 
@@ -46,20 +47,19 @@ export async function GET(request: NextRequest) {
 // Desconectar conta social
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    const ctx = await getUserContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = await createClient();
     const { accountId } = await request.json();
 
     const { error } = await supabase
       .from('social_accounts')
       .update({ is_active: false })
       .eq('id', accountId)
-      .eq('user_id', user.id);
+      .eq('agency_id', ctx.agencyId);
 
     if (error) {
       throw error;

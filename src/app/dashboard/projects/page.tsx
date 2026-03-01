@@ -102,6 +102,15 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-8">
+      {/* Demo Notice */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+        <div>
+          <p className="text-sm text-yellow-200 font-medium">Modo de demonstração</p>
+          <p className="text-xs text-yellow-400/70">Projetos mostra dados de exemplo. Módulo de gestão de projetos com dados reais em breve.</p>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative">
         <div className="absolute -top-4 -left-4 w-24 h-24 bg-white/5 rounded-full blur-2xl animate-pulse" />

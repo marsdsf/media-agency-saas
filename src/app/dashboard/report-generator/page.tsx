@@ -7,6 +7,7 @@ import {
   Palette, Check, Sparkles, ArrowRight, Globe, Instagram,
   Facebook, Twitter, Linkedin, Mail, Loader2
 } from 'lucide-react';
+import { useClients } from '@/hooks/useApiData';
 
 interface ReportTemplate {
   id: string;
@@ -54,12 +55,22 @@ interface Client {
   platforms: string[];
 }
 
-const demoClients: Client[] = [
-  { id: '1', name: 'Loja Fashion', logo: '👗', platforms: ['instagram', 'facebook'] },
-  { id: '2', name: 'Academia XYZ', logo: '💪', platforms: ['instagram'] },
-  { id: '3', name: 'Restaurante ABC', logo: '🍽️', platforms: ['instagram', 'facebook'] },
-  { id: '4', name: 'Tech Startup', logo: '🚀', platforms: ['linkedin', 'twitter'] },
-];
+export default function ReportGeneratorPage() {
+  const { data: clientsData } = useClients();
+  const apiClients: any[] = clientsData?.clients || [];
+  const demoClients: Client[] = apiClients.length > 0
+    ? apiClients.map((c: any) => ({
+        id: c.id,
+        name: c.name || c.company,
+        logo: (c.name || c.company || '?')[0].toUpperCase(),
+        platforms: c.platforms || ['instagram'],
+      }))
+    : [
+        { id: '1', name: 'Loja Fashion', logo: '👗', platforms: ['instagram', 'facebook'] },
+        { id: '2', name: 'Academia XYZ', logo: '💪', platforms: ['instagram'] },
+        { id: '3', name: 'Restaurante ABC', logo: '🍽️', platforms: ['instagram', 'facebook'] },
+        { id: '4', name: 'Tech Startup', logo: '🚀', platforms: ['linkedin', 'twitter'] },
+      ];
 
 export default function ReportGeneratorPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);

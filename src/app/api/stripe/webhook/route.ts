@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, PLANS } from '@/lib/stripe';
 import { headers } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
-
-// Função para criar cliente admin do Supabase
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !key || url === 'sua_url_do_supabase') {
-    throw new Error('Supabase not configured');
-  }
-  
-  return createClient(url, key);
-}
+import { getSupabaseAdmin } from '@/lib/auth';
+import { getPlanById } from '@/lib/plans';
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -49,32 +38,37 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        const userId = session.metadata?.supabase_user_id;
-        const planId = session.metadata?.plan_id as keyof typeof PLANS;
+        const agencyId = session.metadata?.agency_id;
+        const planId = session.metadata?.plan_id;
 
-        if (userId && planId) {
-          const plan = PLANS[planId];
+        if (agencyId && planId) {
+          const plan = getPlanById(planId);
           
-          await supabaseAdmin
-            .from('profiles')
-            .update({
-              plan: planId,
-              credits: plan.credits,
-              stripe_subscription_id: session.subscription,
-              subscription_status: 'active',
-            })
-            .eq('id', userId);
+          if (plan) {
+            await supabaseAdmin
+              .from('agencies')
+              .update({
+                plan: planId,
+                ai_credits_limit: plan.limits.aiCredits,
+                ai_credits_used: 0,
+                max_clients: plan.limits.maxClients,
+                max_team_members: plan.limits.maxTeamMembers,
+                stripe_subscription_id: session.subscription,
+                subscription_status: 'active',
+              })
+              .eq('id', agencyId);
 
-          // Registrar transação de créditos
-          await supabaseAdmin
-            .from('credit_transactions')
-            .insert({
-              user_id: userId,
-              amount: plan.credits,
-              type: 'subscription',
-              description: `Assinatura ${plan.name} ativada`,
-              balance_after: plan.credits,
-            });
+            // Registrar transação de créditos
+            await supabaseAdmin
+              .from('credit_transactions')
+              .insert({
+                agency_id: agencyId,
+                amount: plan.limits.aiCredits,
+                type: 'subscription',
+                action: 'subscription_activated',
+                description: `Assinatura ${plan.name} ativada`,
+              });
+          }
         }
         break;
       }
@@ -83,20 +77,20 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object;
         const customerId = subscription.customer as string;
 
-        // Buscar usuário pelo customer_id
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
+        // Buscar agência pelo customer_id
+        const { data: agency } = await supabaseAdmin
+          .from('agencies')
           .select('id')
           .eq('stripe_customer_id', customerId)
           .single();
 
-        if (profile) {
+        if (agency) {
           await supabaseAdmin
-            .from('profiles')
+            .from('agencies')
             .update({
               subscription_status: subscription.status,
             })
-            .eq('id', profile.id);
+            .eq('id', agency.id);
         }
         break;
       }
@@ -105,21 +99,21 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object;
         const customerId = subscription.customer as string;
 
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
+        const { data: agency } = await supabaseAdmin
+          .from('agencies')
           .select('id')
           .eq('stripe_customer_id', customerId)
           .single();
 
-        if (profile) {
+        if (agency) {
           await supabaseAdmin
-            .from('profiles')
+            .from('agencies')
             .update({
-              plan: 'free',
+              plan: 'starter',
               subscription_status: 'canceled',
               stripe_subscription_id: null,
             })
-            .eq('id', profile.id);
+            .eq('id', agency.id);
         }
         break;
       }
@@ -128,32 +122,33 @@ export async function POST(request: NextRequest) {
         const invoice = event.data.object;
         const customerId = invoice.customer as string;
 
-        // Renovação mensal - adicionar créditos
+        // Renovação mensal - reset créditos
         if (invoice.billing_reason === 'subscription_cycle') {
-          const { data: profile } = await supabaseAdmin
-            .from('profiles')
-            .select('id, plan, credits')
+          const { data: agency } = await supabaseAdmin
+            .from('agencies')
+            .select('id, plan, ai_credits_limit')
             .eq('stripe_customer_id', customerId)
             .single();
 
-          if (profile && profile.plan !== 'free') {
-            const plan = PLANS[profile.plan as keyof typeof PLANS];
-            const newCredits = profile.credits + plan.credits;
+          if (agency) {
+            const plan = getPlanById(agency.plan);
+            if (plan) {
+              // Reset credits on renewal
+              await supabaseAdmin
+                .from('agencies')
+                .update({ ai_credits_used: 0 })
+                .eq('id', agency.id);
 
-            await supabaseAdmin
-              .from('profiles')
-              .update({ credits: newCredits })
-              .eq('id', profile.id);
-
-            await supabaseAdmin
-              .from('credit_transactions')
-              .insert({
-                user_id: profile.id,
-                amount: plan.credits,
-                type: 'subscription',
-                description: `Renovação mensal - ${plan.name}`,
-                balance_after: newCredits,
-              });
+              await supabaseAdmin
+                .from('credit_transactions')
+                .insert({
+                  agency_id: agency.id,
+                  amount: plan.limits.aiCredits,
+                  type: 'subscription',
+                  action: 'subscription_renewed',
+                  description: `Renovação mensal - ${plan.name}`,
+                });
+            }
           }
         }
         break;
@@ -163,17 +158,17 @@ export async function POST(request: NextRequest) {
         const invoice = event.data.object;
         const customerId = invoice.customer as string;
 
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
+        const { data: agency } = await supabaseAdmin
+          .from('agencies')
           .select('id')
           .eq('stripe_customer_id', customerId)
           .single();
 
-        if (profile) {
+        if (agency) {
           await supabaseAdmin
-            .from('profiles')
+            .from('agencies')
             .update({ subscription_status: 'past_due' })
-            .eq('id', profile.id);
+            .eq('id', agency.id);
         }
         break;
       }

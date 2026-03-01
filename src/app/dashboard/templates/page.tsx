@@ -25,10 +25,12 @@ import {
   Sparkles,
   Clock,
   Eye,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import { Button, Card, Input, Badge, Modal } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { useTemplates, useApiMutation } from '@/hooks/useApiData';
 
 const FaTiktok = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -46,113 +48,6 @@ const categories = [
   { id: 'tech', label: 'Tech', icon: Code },
   { id: 'health', label: 'Saúde', icon: Heart },
   { id: 'realestate', label: 'Imóveis', icon: Building },
-];
-
-const templates = [
-  {
-    id: '1',
-    title: 'Lançamento de Produto',
-    description: 'Template para anunciar novos produtos com destaque',
-    category: 'ecommerce',
-    platforms: ['instagram', 'facebook'],
-    content: '🚀 LANÇAMENTO EXCLUSIVO!\n\n[Nome do Produto] chegou para revolucionar sua rotina.\n\n✨ [Benefício 1]\n✨ [Benefício 2]\n✨ [Benefício 3]\n\n🔥 Oferta de lançamento: [Desconto]% OFF\n⏰ Por tempo limitado!\n\n👉 Link na bio\n\n#lancamento #novidade #[nicho]',
-    usageCount: 1250,
-    rating: 4.8,
-    isFavorite: true,
-    createdBy: 'Sistema',
-    preview: '🚀 LANÇAMENTO EXCLUSIVO! Produto chegou para revolucionar...',
-  },
-  {
-    id: '2',
-    title: 'Carrossel Educativo',
-    description: 'Sequência de dicas e informações valiosas',
-    category: 'business',
-    platforms: ['instagram', 'linkedin'],
-    content: '📚 [Título do Carrossel]\n\nSlide 1: Introdução atrativa\nSlide 2: Dica/Info 1\nSlide 3: Dica/Info 2\nSlide 4: Dica/Info 3\nSlide 5: Dica/Info 4\nSlide 6: CTA + Salva esse post!\n\n💡 Qual dica você mais curtiu?\nComenta aqui! 👇\n\n#dicas #[nicho] #aprendizado',
-    usageCount: 890,
-    rating: 4.6,
-    isFavorite: false,
-    createdBy: 'Sistema',
-    preview: '📚 [Título do Carrossel] - Dicas valiosas em formato de slides...',
-  },
-  {
-    id: '3',
-    title: 'Antes e Depois',
-    description: 'Mostrar transformações e resultados',
-    category: 'fitness',
-    platforms: ['instagram', 'tiktok'],
-    content: '💪 TRANSFORMAÇÃO REAL!\n\n📅 [Tempo de transformação]\n\n🔥 ANTES:\n• [Situação anterior]\n\n✨ DEPOIS:\n• [Resultado alcançado]\n\n📌 O que mudou:\n→ [Mudança 1]\n→ [Mudança 2]\n→ [Mudança 3]\n\nVocê também pode! 🚀\n\n#transformacao #antesedepois #fitness #resultado',
-    usageCount: 2340,
-    rating: 4.9,
-    isFavorite: true,
-    createdBy: 'Sistema',
-    preview: '💪 TRANSFORMAÇÃO REAL! Resultado de [X] semanas...',
-  },
-  {
-    id: '4',
-    title: 'Receita Passo a Passo',
-    description: 'Template para compartilhar receitas',
-    category: 'food',
-    platforms: ['instagram', 'tiktok', 'facebook'],
-    content: '🍳 [NOME DA RECEITA]\n\n⏱️ Tempo: [X] minutos\n👥 Rende: [X] porções\n\n📝 INGREDIENTES:\n• [Ingrediente 1]\n• [Ingrediente 2]\n• [Ingrediente 3]\n\n👨‍🍳 MODO DE PREPARO:\n1. [Passo 1]\n2. [Passo 2]\n3. [Passo 3]\n\n💡 Dica: [Dica especial]\n\nSalva pra fazer depois! 📌\n\n#receita #food #culinaria',
-    usageCount: 1560,
-    rating: 4.7,
-    isFavorite: false,
-    createdBy: 'Sistema',
-    preview: '🍳 [NOME DA RECEITA] - Receita rápida e deliciosa...',
-  },
-  {
-    id: '5',
-    title: 'Depoimento de Cliente',
-    description: 'Prova social com feedback real',
-    category: 'business',
-    platforms: ['instagram', 'facebook', 'linkedin'],
-    content: '⭐ O QUE NOSSOS CLIENTES DIZEM:\n\n"[Depoimento do cliente aqui - seja específico sobre resultados]"\n\n— [Nome do Cliente], [Cargo/Cidade]\n\n✅ [Resultado específico 1]\n✅ [Resultado específico 2]\n\n🤝 Quer resultados assim também?\n👉 Link na bio\n\n#depoimento #cliente #resultado #sucesso',
-    usageCount: 780,
-    rating: 4.5,
-    isFavorite: false,
-    createdBy: 'Sistema',
-    preview: '⭐ O QUE NOSSOS CLIENTES DIZEM: "Depoimento incrível..."',
-  },
-  {
-    id: '6',
-    title: 'Behind the Scenes',
-    description: 'Bastidores do negócio para humanizar',
-    category: 'business',
-    platforms: ['instagram', 'tiktok'],
-    content: '🎬 BASTIDORES!\n\nHoje você vai ver como é o dia a dia aqui na [Empresa]...\n\n[Descrição do que está acontecendo]\n\nMuita gente não sabe, mas:\n→ [Curiosidade 1]\n→ [Curiosidade 2]\n\n💬 Quer ver mais conteúdos assim?\n\n#bastidores #rotina #behindthescenes',
-    usageCount: 650,
-    rating: 4.4,
-    isFavorite: true,
-    createdBy: 'Sistema',
-    preview: '🎬 BASTIDORES! Hoje você vai ver como é o dia a dia...',
-  },
-  {
-    id: '7',
-    title: 'Dica Rápida',
-    description: 'Conteúdo educativo objetivo',
-    category: 'tech',
-    platforms: ['twitter', 'linkedin'],
-    content: '💡 DICA RÁPIDA:\n\n[Título da dica]\n\n➡️ [Explicação concisa]\n\n📌 Por que isso funciona:\n[Breve explicação]\n\n🔗 Mais dicas no perfil!\n\n#dica #hack #produtividade',
-    usageCount: 1120,
-    rating: 4.6,
-    isFavorite: false,
-    createdBy: 'Sistema',
-    preview: '💡 DICA RÁPIDA: [Título] - Explicação objetiva...',
-  },
-  {
-    id: '8',
-    title: 'Imóvel à Venda',
-    description: 'Anúncio profissional de imóvel',
-    category: 'realestate',
-    platforms: ['instagram', 'facebook'],
-    content: '🏠 À VENDA - [Bairro/Cidade]\n\n📐 [X]m² | 🛏️ [X] quartos | 🚗 [X] vagas\n\n✨ DESTAQUES:\n• [Característica 1]\n• [Característica 2]\n• [Característica 3]\n\n💰 R$ [Valor]\n📍 [Endereço aproximado]\n\n📲 Agende sua visita!\n📞 [Telefone]\n\n#imovel #venda #[cidade] #corretor',
-    usageCount: 430,
-    rating: 4.3,
-    isFavorite: false,
-    createdBy: 'Sistema',
-    preview: '🏠 À VENDA - [Bairro/Cidade] - 3 quartos, 2 vagas...',
-  },
 ];
 
 const platformIcons: Record<string, React.ComponentType<any>> = {
@@ -174,15 +69,22 @@ const platformColors: Record<string, string> = {
 export default function TemplatesPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<typeof templates[0] | null>(null);
-  const [favorites, setFavorites] = useState<string[]>(['1', '3', '6']);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({ title: '', content: '', category: 'business', platforms: ['instagram'] });
 
-  const filteredTemplates = templates.filter(t => {
-    const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
-    const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         t.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+  const categoryParam = selectedCategory === 'all' ? undefined : selectedCategory;
+  const { data: templates, loading, refetch } = useTemplates(categoryParam);
+  const createMutation = useApiMutation('/api/templates', 'POST');
+
+  const templatesList: any[] = templates || [];
+
+  const filteredTemplates = templatesList.filter((t: any) => {
+    const matchesSearch = (t.title || t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (t.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
 
   const toggleFavorite = (id: string) => {
@@ -197,6 +99,27 @@ export default function TemplatesPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCreate = async () => {
+    if (!newTemplate.title || !newTemplate.content) return;
+    await createMutation.execute({
+      title: newTemplate.title,
+      content: newTemplate.content,
+      category: newTemplate.category,
+      platforms: newTemplate.platforms,
+    });
+    setNewTemplate({ title: '', content: '', category: 'business', platforms: ['instagram'] });
+    setShowCreate(false);
+    refetch();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -206,7 +129,7 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-white">Templates de Posts</h1>
           <p className="text-gray-400 mt-1">Modelos prontos para acelerar sua criação</p>
         </div>
-        <Button leftIcon={<Plus className="w-4 h-4" />} className="group">
+        <Button leftIcon={<Plus className="w-4 h-4" />} className="group" onClick={() => setShowCreate(true)}>
           <span className="group-hover:scale-105 transition-transform inline-block">Criar Template</span>
         </Button>
       </div>
@@ -268,15 +191,16 @@ export default function TemplatesPage() {
 
               {/* Preview */}
               <div className="p-4 rounded-xl bg-[#1a1a2e] mb-4">
-                <p className="text-gray-300 text-sm line-clamp-3">{template.preview}</p>
+                <p className="text-gray-300 text-sm line-clamp-3">{(template.content || '').substring(0, 120)}...</p>
               </div>
 
               {/* Platforms */}
               <div className="flex items-center gap-2 mb-4">
-                {template.platforms.map((platform) => {
+                {(template.platforms || []).map((platform: string) => {
                   const Icon = platformIcons[platform];
+                  if (!Icon) return null;
                   return (
-                    <div key={platform} className={cn('p-1.5 rounded-lg', platformColors[platform])}>
+                    <div key={platform} className={cn('p-1.5 rounded-lg', platformColors[platform] || 'bg-white/10 text-white')}>
                       <Icon className="w-4 h-4" />
                     </div>
                   );
@@ -285,14 +209,23 @@ export default function TemplatesPage() {
 
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm text-gray-400">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  {template.usageCount.toLocaleString()} usos
-                </span>
-                <span className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-white" />
-                  {template.rating}
-                </span>
+                {template.metadata?.usageCount != null && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    {Number(template.metadata.usageCount).toLocaleString()} usos
+                  </span>
+                )}
+                {template.metadata?.rating != null && (
+                  <span className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-white" />
+                    {template.metadata.rating}
+                  </span>
+                )}
+                {template.created_at && (
+                  <span className="text-gray-500 text-xs">
+                    {new Date(template.created_at).toLocaleDateString('pt-BR')}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -343,10 +276,11 @@ export default function TemplatesPage() {
             {/* Platforms */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Plataformas:</span>
-              {selectedTemplate.platforms.map((platform) => {
+              {(selectedTemplate.platforms || []).map((platform: string) => {
                 const Icon = platformIcons[platform];
+                if (!Icon) return null;
                 return (
-                  <div key={platform} className={cn('p-2 rounded-lg', platformColors[platform])}>
+                  <div key={platform} className={cn('p-2 rounded-lg', platformColors[platform] || 'bg-white/10 text-white')}>
                     <Icon className="w-4 h-4" />
                   </div>
                 );
@@ -362,17 +296,23 @@ export default function TemplatesPage() {
 
             {/* Stats */}
             <div className="flex items-center gap-6 text-sm">
-              <span className="flex items-center gap-2 text-gray-400">
-                <Clock className="w-4 h-4" />
-                {selectedTemplate.usageCount.toLocaleString()} usos
-              </span>
-              <span className="flex items-center gap-2 text-gray-400">
-                <Star className="w-4 h-4 text-white" />
-                {selectedTemplate.rating} avaliação
-              </span>
-              <span className="text-gray-500">
-                Criado por: {selectedTemplate.createdBy}
-              </span>
+              {selectedTemplate.metadata?.usageCount != null && (
+                <span className="flex items-center gap-2 text-gray-400">
+                  <Clock className="w-4 h-4" />
+                  {Number(selectedTemplate.metadata.usageCount).toLocaleString()} usos
+                </span>
+              )}
+              {selectedTemplate.metadata?.rating != null && (
+                <span className="flex items-center gap-2 text-gray-400">
+                  <Star className="w-4 h-4 text-white" />
+                  {selectedTemplate.metadata.rating} avaliação
+                </span>
+              )}
+              {selectedTemplate.created_at && (
+                <span className="text-gray-500">
+                  Criado em: {new Date(selectedTemplate.created_at).toLocaleDateString('pt-BR')}
+                </span>
+              )}
             </div>
 
             {/* Actions */}
@@ -394,6 +334,86 @@ export default function TemplatesPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Create Template Modal */}
+      <Modal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="Criar Template"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Título</label>
+            <Input
+              placeholder="Nome do template"
+              value={newTemplate.title}
+              onChange={(e) => setNewTemplate(p => ({ ...p, title: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Categoria</label>
+            <select
+              value={newTemplate.category}
+              onChange={(e) => setNewTemplate(p => ({ ...p, category: e.target.value }))}
+              className="w-full bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg px-3 py-2 text-white text-sm"
+            >
+              {categories.filter(c => c.id !== 'all').map(c => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Plataformas</label>
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(platformIcons).map(([key, Icon]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setNewTemplate(p => ({
+                      ...p,
+                      platforms: p.platforms.includes(key)
+                        ? p.platforms.filter(pl => pl !== key)
+                        : [...p.platforms, key]
+                    }));
+                  }}
+                  className={cn(
+                    'p-2 rounded-lg border transition-all',
+                    newTemplate.platforms.includes(key)
+                      ? 'border-white/30 bg-white/10 text-white'
+                      : 'border-transparent bg-[#1a1a2e] text-gray-500'
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Conteúdo</label>
+            <textarea
+              rows={8}
+              placeholder="Escreva o conteúdo do template..."
+              value={newTemplate.content}
+              onChange={(e) => setNewTemplate(p => ({ ...p, content: e.target.value }))}
+              className="w-full bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg px-3 py-2 text-white text-sm resize-none"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowCreate(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              leftIcon={createMutation.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              onClick={handleCreate}
+              disabled={createMutation.loading || !newTemplate.title || !newTemplate.content}
+            >
+              {createMutation.loading ? 'Criando...' : 'Criar Template'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

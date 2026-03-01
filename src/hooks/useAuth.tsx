@@ -9,18 +9,27 @@ interface Profile {
   email: string;
   fullName: string | null;
   avatarUrl: string | null;
+  role: string;
+  agencyId: string | null;
+}
+
+interface Agency {
+  id: string;
+  name: string;
   plan: string;
-  credits: number;
-  creditsUsed: number;
+  aiCreditsLimit: number;
+  aiCreditsUsed: number;
   subscriptionStatus: string;
+  maxClients: number;
+  maxTeamMembers: number;
 }
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  agency: Agency | null;
   isLoading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -32,12 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [agency, setAgency] = useState<Agency | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
 
   useEffect(() => {
-    // Verificar sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -48,7 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Escutar mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
@@ -58,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setAgency(null);
         }
         setIsLoading(false);
       }
@@ -68,40 +77,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (data && !error) {
+      if (profileData && !profileError) {
         setProfile({
-          id: data.id,
-          email: data.email,
-          fullName: data.full_name,
-          avatarUrl: data.avatar_url,
-          plan: data.plan,
-          credits: data.credits,
-          creditsUsed: data.credits_used,
-          subscriptionStatus: data.subscription_status,
+          id: profileData.id,
+          email: profileData.email,
+          fullName: profileData.full_name,
+          avatarUrl: profileData.avatar_url,
+          role: profileData.role || 'agency_member',
+          agencyId: profileData.agency_id,
         });
+
+        // Fetch agency data if user belongs to one
+        if (profileData.agency_id) {
+          const { data: agencyData } = await supabase
+            .from('agencies')
+            .select('*')
+            .eq('id', profileData.agency_id)
+            .single();
+
+          if (agencyData) {
+            setAgency({
+              id: agencyData.id,
+              name: agencyData.name,
+              plan: agencyData.plan,
+              aiCreditsLimit: agencyData.ai_credits_limit,
+              aiCreditsUsed: agencyData.ai_credits_used,
+              subscriptionStatus: agencyData.subscription_status,
+              maxClients: agencyData.max_clients,
+              maxTeamMembers: agencyData.max_team_members,
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-      },
-    });
-    return { error };
   };
 
   const signIn = async (email: string, password: string) => {
@@ -117,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setProfile(null);
+    setAgency(null);
   };
 
   const refreshProfile = async () => {
@@ -130,8 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       profile,
+      agency,
       isLoading,
-      signUp,
       signIn,
       signOut,
       refreshProfile,

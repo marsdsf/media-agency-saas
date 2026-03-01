@@ -179,6 +179,15 @@ export default function ApprovalsPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Demo Notice */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+        <div>
+          <p className="text-sm text-yellow-200 font-medium">Modo de demonstração</p>
+          <p className="text-xs text-yellow-400/70">Aprovações mostra dados de exemplo. Conecte ao portal do cliente para aprovações reais.</p>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
