@@ -42,29 +42,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protected routes
-  const protectedPaths = ['/dashboard'];
-  const isProtectedPath = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
-  );
+  // Protected routes — DISABLED FOR TESTING
+  // const protectedPaths = ['/dashboard'];
+  // const isProtectedPath = protectedPaths.some((path) =>
+  //   request.nextUrl.pathname.startsWith(path)
+  // );
 
-  if (isProtectedPath && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
+  // if (isProtectedPath && !user) {
+  //   const url = request.nextUrl.clone();
+  //   url.pathname = '/login';
+  //   return NextResponse.redirect(url);
+  // }
 
-  // Redirect logged in users away from auth pages
-  const authPaths = ['/login', '/register'];
-  const isAuthPath = authPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
-  );
+  // Redirect logged in users away from auth pages — DISABLED FOR TESTING
+  // const authPaths = ['/login', '/register'];
+  // const isAuthPath = authPaths.some((path) =>
+  //   request.nextUrl.pathname.startsWith(path)
+  // );
 
-  if (isAuthPath && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
-  }
+  // if (isAuthPath && user) {
+  //   const url = request.nextUrl.clone();
+  //   url.pathname = '/dashboard';
+  //   return NextResponse.redirect(url);
+  // }
 
   return supabaseResponse;
 }

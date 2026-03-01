@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Use service role for admin operations
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error('Supabase env vars missing');
+  }
+  return createClient(url, key);
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate env vars
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json(
-        { error: 'Servidor não configurado. Variáveis do Supabase ausentes.' },
-        { status: 500 }
-      );
-    }
+    const supabaseAdmin = getSupabaseAdmin();
 
     const { name, email, password, agencyName, agencyWebsite, teamSize, plan, inviteToken } = await request.json();
 
