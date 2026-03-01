@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, User, ArrowRight, ArrowLeft, Loader2, Check, Building2, Globe, Users } from 'lucide-react';
@@ -20,7 +20,11 @@ interface AgencyData {
 }
 
 export default function RegisterPage() {
-  const [step, setStep] = useState<Step>(1);
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+  const isInvite = !!inviteToken;
+
+  const [step, setStep] = useState<Step>(isInvite ? 1 : 1);
   const [data, setData] = useState<AgencyData>({
     name: '',
     email: '',
@@ -42,7 +46,13 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (step < 3) {
+    // Para convites, pular direto para submissão (não precisa de agência/plano)
+    if (!isInvite && step < 3) {
+      setStep((step + 1) as Step);
+      return;
+    }
+
+    if (isInvite && step < 1) {
       setStep((step + 1) as Step);
       return;
     }
@@ -51,19 +61,26 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      // Register agency via API
+      const body: Record<string, string> = {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+      };
+
+      if (isInvite) {
+        body.inviteToken = inviteToken!;
+      } else {
+        body.agencyName = data.agencyName;
+        body.agencyWebsite = data.agencyWebsite;
+        body.teamSize = data.teamSize;
+        body.plan = data.plan;
+      }
+
+      // Register via API
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: data.name,
-          email: data.email,
-          password: data.password,
-          agencyName: data.agencyName,
-          agencyWebsite: data.agencyWebsite,
-          teamSize: data.teamSize,
-          plan: data.plan,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

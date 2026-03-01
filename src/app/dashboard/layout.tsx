@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store';
+import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Logo } from '@/components/Logo';
 import { 
   LayoutDashboard,
@@ -74,6 +76,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { user, logout, isAuthenticated } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useRealtimeNotifications(user?.id);
 
   const handleLogout = () => {
     logout();
@@ -111,9 +115,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span className="text-sm text-gray-400">Créditos</span>
               <Zap className="w-4 h-4 text-white transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
             </div>
-            <div className="text-2xl font-bold text-white group-hover:scale-105 transition-transform origin-left">2.450</div>
+            <div className="text-2xl font-bold text-white group-hover:scale-105 transition-transform origin-left">
+              {user?.credits != null ? user.credits.toLocaleString('pt-BR') : '—'}
+            </div>
             <div className="w-full bg-[#1a1a1a] rounded-full h-1.5 mt-2 overflow-hidden">
-              <div className="bg-gradient-to-r from-white to-gray-300 h-1.5 rounded-full transition-all duration-500" style={{ width: '65%' }} />
+              <div 
+                className="bg-gradient-to-r from-white to-gray-300 h-1.5 rounded-full transition-all duration-500" 
+                style={{ width: `${user?.creditsLimit ? Math.min(100, ((user.credits || 0) / user.creditsLimit) * 100) : 50}%` }} 
+              />
             </div>
           </div>
 
@@ -193,10 +202,65 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Actions */}
             <div className="flex items-center gap-3">
-              <button className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-all duration-300 hover:scale-110 relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-white rounded-full animate-pulse" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setNotifOpen(!notifOpen)}
+                  className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-all duration-300 hover:scale-110 relative"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-white text-black text-[10px] font-bold rounded-full px-1">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+                
+                {notifOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                    <div className="absolute right-0 top-12 w-80 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl shadow-2xl z-50 overflow-hidden">
+                      <div className="flex items-center justify-between p-4 border-b border-[#1a1a1a]">
+                        <h3 className="text-sm font-semibold text-white">Notificações</h3>
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={() => markAllAsRead()}
+                            className="text-xs text-gray-500 hover:text-white transition-colors"
+                          >
+                            Marcar todas como lidas
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-8 text-center text-gray-500 text-sm">
+                            Nenhuma notificação
+                          </div>
+                        ) : (
+                          notifications.slice(0, 10).map((notif) => (
+                            <button
+                              key={notif.id}
+                              onClick={() => {
+                                if (!notif.read) markAsRead(notif.id);
+                                if (notif.action_url) router.push(notif.action_url);
+                                setNotifOpen(false);
+                              }}
+                              className={`w-full text-left p-4 border-b border-[#111] hover:bg-white/5 transition-colors ${!notif.read ? 'bg-white/[0.02]' : ''}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                {!notif.read && <span className="w-2 h-2 bg-white rounded-full mt-1.5 flex-shrink-0" />}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white font-medium truncate">{notif.title}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
               <button className="p-2 rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-all duration-300 hover:scale-110">
                 <User className="w-5 h-5" />
               </button>
@@ -206,7 +270,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page Content */}
         <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

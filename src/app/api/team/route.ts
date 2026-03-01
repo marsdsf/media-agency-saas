@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserContext, hasPermission } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { sendEmail, invitationEmailTemplate } from '@/lib/email';
 
 // Listar membros do time
 export async function GET(request: NextRequest) {
@@ -98,12 +99,40 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // TODO: Send invitation email
+    // Enviar email de convite
+    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/register?invite=${token}`;
+
+    const { data: agencyData } = await supabase
+      .from('agencies')
+      .select('name')
+      .eq('id', ctx.agencyId)
+      .single();
+
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', ctx.userId)
+      .single();
+
+    const emailTemplate = invitationEmailTemplate({
+      agencyName: agencyData?.name || 'Agência',
+      inviterName: inviterProfile?.full_name || inviterProfile?.email || 'Um membro',
+      inviteUrl,
+      role: body.role || 'agency_member',
+    });
+
+    // Fire-and-forget email (não bloquear resposta)
+    sendEmail({
+      to: body.email,
+      subject: emailTemplate.subject,
+      html: emailTemplate.html,
+      text: emailTemplate.text,
+    }).catch((err) => console.error('Failed to send invitation email:', err));
 
     return NextResponse.json({
       success: true,
       invitation,
-      inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/register?invite=${token}`,
+      inviteUrl,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Erro ao convidar' }, { status: 500 });

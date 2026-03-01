@@ -9,8 +9,14 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, agencyName, agencyWebsite, teamSize, plan } = await request.json();
+    const { name, email, password, agencyName, agencyWebsite, teamSize, plan, inviteToken } = await request.json();
 
+    // === FLUXO DE CONVITE ===
+    if (inviteToken) {
+      return handleInviteRegistration({ name, email, password, inviteToken });
+    }
+
+    // === FLUXO NORMAL ===
     if (!name || !email || !password || !agencyName) {
       return NextResponse.json(
         { error: 'Nome, email, senha e nome da agência são obrigatórios' },
@@ -159,3 +165,160 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Registrar via convite — entra em agência existente
+async function handleInviteRegistration(params: {
+  name: string;
+  email: string;
+  password: string;
+  inviteToken: string;
+}) {
+  const { name, email, password, inviteToken } = params;
+
+  if (!name || !email || !password) {
+    return NextResponse.json(
+      { error: 'Nome, email e senha são obrigatórios' },
+      { status: 400 }
+    );
+  }
+
+  // Buscar convite válido
+  const { data: invitation, error: invError } = await supabaseAdmin
+    .from('invitations')
+    .select('*')
+    .eq('token', inviteToken)
+    .eq('status', 'pending')
+    .single();
+
+  if (invError || !invitation) {
+    return NextResponse.json(
+      { error: 'Convite inválido ou expirado' },
+      { status: 400 }
+    );
+  }
+
+  // Verificar se expirou
+  if (new Date(invitation.expires_at) < new Date()) {
+    await supabaseAdmin
+      .from('invitations')
+      .update({ status: 'expired' })
+      .eq('id', invitation.id);
+
+    return NextResponse.json(
+      { error: 'Este convite expirou' },
+      { status: 400 }
+    );
+  }
+
+  // Verificar email (se o convite é para email específico)
+  if (invitation.email && invitation.email !== email) {
+    return NextResponse.json(
+      { error: 'Este convite foi enviado para outro email' },
+      { status: 400 }
+    );
+  }
+
+  // Criar usuário
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      name,
+      role: invitation.role || 'agency_member',
+    },
+  });
+
+  if (authError) {
+    if (authError.message.includes('already registered')) {
+      return NextResponse.json(
+        { error: 'Este email já está registrado' },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: 'Erro ao criar usuário' },
+      { status: 500 }
+    );
+  }
+
+  const userId = authData.user.id;
+
+  // Criar perfil vinculado à agência do convite
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .insert({
+      id: userId,
+      email,
+      full_name: name,
+      role: invitation.role || 'agency_member',
+      agency_id: invitation.agency_id,
+      permissions: invitation.permissions || [],
+    });
+
+  if (profileError) {
+    await supabaseAdmin.auth.admin.deleteUser(userId);
+    return NextResponse.json(
+      { error: 'Erro ao criar perfil' },
+      { status: 500 }
+    );
+  }
+
+  // Atualizar convite como aceito
+  await supabaseAdmin
+    .from('invitations')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+    })
+    .eq('id', invitation.id);
+
+  // Buscar nome da agência
+  const { data: agency } = await supabaseAdmin
+    .from('agencies')
+    .select('name, slug')
+    .eq('id', invitation.agency_id)
+    .single();
+
+  // Log de atividade
+  await supabaseAdmin.from('activity_log').insert({
+    agency_id: invitation.agency_id,
+    user_id: userId,
+    action: 'member_joined',
+    entity_type: 'profile',
+    entity_id: userId,
+    details: {
+      name,
+      email,
+      role: invitation.role,
+      invitedBy: invitation.invited_by,
+    },
+  });
+
+  // Notificação para quem convidou
+  await supabaseAdmin.from('notifications').insert({
+    user_id: invitation.invited_by,
+    type: 'team',
+    title: 'Novo membro no time!',
+    message: `${name} aceitou o convite e entrou na equipe.`,
+    action_url: '/dashboard/team',
+  });
+
+  // Notificação de boas-vindas
+  await supabaseAdmin.from('notifications').insert({
+    user_id: userId,
+    type: 'welcome',
+    title: `Bem-vindo à ${agency?.name || 'equipe'}! 🎉`,
+    message: 'Você foi adicionado à equipe com sucesso.',
+    action_url: '/dashboard',
+  });
+
+  return NextResponse.json({
+    success: true,
+    user: { id: userId, email, name },
+    agency: {
+      id: invitation.agency_id,
+      name: agency?.name,
+      slug: agency?.slug,
+    },
+  });
+}
