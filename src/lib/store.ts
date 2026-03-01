@@ -44,6 +44,8 @@ interface User {
   agency_id?: string;
   agency_name?: string;
   plan?: string;
+  credits?: number;
+  creditsLimit?: number;
 }
 
 interface AuthState {

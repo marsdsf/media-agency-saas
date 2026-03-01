@@ -79,7 +79,7 @@ export default function TemplatesPage() {
   const { data: templates, loading, refetch } = useTemplates(categoryParam);
   const createMutation = useApiMutation('/api/templates', 'POST');
 
-  const templatesList: any[] = templates || [];
+  const templatesList: any[] = (templates as any)?.templates || (Array.isArray(templates) ? templates : []);
 
   const filteredTemplates = templatesList.filter((t: any) => {
     const matchesSearch = (t.title || t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -101,7 +101,7 @@ export default function TemplatesPage() {
 
   const handleCreate = async () => {
     if (!newTemplate.title || !newTemplate.content) return;
-    await createMutation.execute({
+    await createMutation.mutate({
       title: newTemplate.title,
       content: newTemplate.content,
       category: newTemplate.category,

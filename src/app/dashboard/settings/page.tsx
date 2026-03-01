@@ -29,7 +29,7 @@ import {
 import { Button, Card, Input, Badge, Tabs, Avatar } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { useProfile, useSocialAccounts } from '@/hooks/useApiData';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/lib/store';
 
 // Platform icon mapping (custom since some don't exist in lucide-react)
 const FaTiktok = () => (
@@ -60,7 +60,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const { data: profileData, loading: profileLoading } = useProfile();
   const { data: socialAccounts } = useSocialAccounts();
-  const { profile: authProfile, agency, signOut } = useAuth();
+  const { user } = useAuthStore();
+  const authProfile = user ? { fullName: user.name } : null;
+  const agency = user ? { id: user.agency_id, name: user.agency_name, plan: user.plan || 'starter', aiCreditsUsed: user.credits || 0, aiCreditsLimit: user.creditsLimit || 2000 } : null;
 
   const [profileForm, setProfileForm] = useState({
     name: '',
@@ -75,11 +77,11 @@ export default function SettingsPage() {
   useEffect(() => {
     if (profileData) {
       setProfileForm({
-        name: profileData.profile?.full_name || authProfile?.full_name || '',
+        name: profileData.profile?.full_name || authProfile?.fullName || '',
         email: profileData.profile?.email || '',
         phone: profileData.profile?.phone || '',
         company: agency?.name || '',
-        website: agency?.website || '',
+        website: (agency as any)?.website || '',
         timezone: profileData.profile?.timezone || 'America/Sao_Paulo',
         language: 'pt-BR',
       });
@@ -108,7 +110,8 @@ export default function SettingsPage() {
   };
 
   const connectedPlatforms = platformDefs.map(p => {
-    const account = (socialAccounts || []).find((a: any) => a.platform === p.id);
+    const accountsList: any[] = (socialAccounts as any)?.accounts || (Array.isArray(socialAccounts) ? socialAccounts : []);
+    const account = accountsList.find((a: any) => a.platform === p.id);
     return {
       ...p,
       connected: !!account,
@@ -185,15 +188,15 @@ export default function SettingsPage() {
             <div className="mt-6 pt-6 border-t border-[#1a1a2e] space-y-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">Membro desde</span>
-                <span className="text-white">{authProfile?.created_at ? new Date(authProfile.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '-'}</span>
+                <span className="text-white">{(authProfile as any)?.created_at ? new Date((authProfile as any).created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '-'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">Créditos usados</span>
-                <span className="text-white">{(agency?.ai_credits_used || 0).toLocaleString()}</span>
+                <span className="text-white">{(agency?.aiCreditsUsed || 0).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-400">Limite</span>
-                <span className="text-white">{(agency?.ai_credits_limit || 0).toLocaleString()}</span>
+                <span className="text-white">{(agency?.aiCreditsLimit || 0).toLocaleString()}</span>
               </div>
             </div>
           </Card>

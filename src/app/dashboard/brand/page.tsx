@@ -26,6 +26,7 @@ export default function BrandKitPage() {
   const { data: brandData, loading, refetch } = useBrandAssets();
   const createMutation = useApiMutation('/api/brand', 'POST');
   const deleteMutation = useApiMutation('/api/brand', 'DELETE');
+  const patchMutation = useApiMutation('/api/brand', 'PATCH');
 
   const assets = brandData?.assets || [];
 
@@ -53,7 +54,7 @@ Evitamos:
   };
 
   const handleAddColor = async () => {
-    await createMutation.execute({
+    await createMutation.mutate({
       type: 'color',
       name: 'Nova Cor',
       value: '#FFFFFF',
@@ -63,7 +64,7 @@ Evitamos:
   };
 
   const handleAddFont = async () => {
-    await createMutation.execute({
+    await createMutation.mutate({
       type: 'font',
       name: 'Inter',
       value: 'Inter',
@@ -74,17 +75,16 @@ Evitamos:
 
   const handleDelete = async (id: string) => {
     if (!confirm('Excluir este asset?')) return;
-    await deleteMutation.execute({ id });
+    await deleteMutation.mutate({ id });
     refetch();
   };
 
   const handleSaveTone = async () => {
     if (guidelines) {
       // Update existing
-      const patchMutation = useApiMutation('/api/brand', 'PATCH');
-      await patchMutation.execute({ id: guidelines.id, value: toneOfVoice });
+      await patchMutation.mutate({ id: guidelines.id, value: toneOfVoice });
     } else {
-      await createMutation.execute({
+      await createMutation.mutate({
         type: 'guideline',
         name: 'Tom de Voz',
         value: toneOfVoice,

@@ -17,7 +17,7 @@ import {
 import { Button, Card, Badge } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { PLANS, formatPrice, type PaymentGateway } from '@/lib/payments';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/lib/store';
 
 // Gateways de pagamento disponíveis
 const paymentGateways = [
@@ -57,7 +57,8 @@ const plans = PLANS.map((plan, index) => ({
 }));
 
 export default function BillingPage() {
-  const { agency, user } = useAuth();
+  const { user } = useAuthStore();
+  const agency = { id: user?.agency_id, plan: user?.plan || 'starter', aiCreditsUsed: user?.credits || 0, aiCreditsLimit: user?.creditsLimit || 2000 };
   const [selectedPlan, setSelectedPlan] = useState(agency?.plan || 'starter');
   const [selectedGateway, setSelectedGateway] = useState<string>('pix');
   const [isLoading, setIsLoading] = useState(false);
@@ -65,8 +66,8 @@ export default function BillingPage() {
 
   const currentPlan = plans.find(p => p.id === (agency?.plan || 'starter'));
   const currentUsage = {
-    credits: agency?.ai_credits_used || 0,
-    limit: agency?.ai_credits_limit || 2000,
+    credits: agency?.aiCreditsUsed || 0,
+    limit: agency?.aiCreditsLimit || 2000,
   };
 
   const handleSelectPlan = (planId: string) => {

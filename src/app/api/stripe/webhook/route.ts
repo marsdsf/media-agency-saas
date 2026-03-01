@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
                 plan: planId,
                 ai_credits_limit: plan.limits.aiCredits,
                 ai_credits_used: 0,
-                max_clients: plan.limits.maxClients,
-                max_team_members: plan.limits.maxTeamMembers,
+                max_clients: plan.limits.clients,
+                max_team_members: plan.limits.teamMembers,
                 stripe_subscription_id: session.subscription,
                 subscription_status: 'active',
               })

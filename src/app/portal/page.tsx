@@ -454,7 +454,7 @@ export default function ClientPortalPage() {
               <p className="text-white mb-4">{selectedPost.content}</p>
 
               <div className="flex flex-wrap gap-2 mb-4">
-                {selectedPost.hashtags.map((tag, i) => (
+                {selectedPost.hashtags.map((tag: string, i: number) => (
                   <span key={i} className="px-2 py-1 rounded-full bg-violet-500/10 text-violet-400 text-sm">
                     {tag}
                   </span>

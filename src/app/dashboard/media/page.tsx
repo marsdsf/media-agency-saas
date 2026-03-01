@@ -42,6 +42,8 @@ export default function MediaPage() {
   const { data, loading, error, refetch } = useMediaLibrary(selectedType);
   const deleteMedia = useApiMutation('/api/media', 'DELETE');
   const mediaItems = data?.media ?? [];
+  const storageUsed = Number(((mediaItems.reduce((acc: number, item: any) => acc + (item.file_size || 0), 0)) / (1024 * 1024 * 1024)).toFixed(2));
+  const storageTotal = 10;
 
   const filteredMedia = mediaItems.filter((item: any) => {
     if (!searchQuery) return true;

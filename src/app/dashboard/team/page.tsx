@@ -85,7 +85,7 @@ export default function TeamPage() {
 
   const handleInvite = async () => {
     if (!inviteEmail) return;
-    await inviteMutation.execute({ email: inviteEmail, role: inviteRole });
+    await inviteMutation.mutate({ email: inviteEmail, role: inviteRole });
     setInviteEmail('');
     setShowInvite(false);
     refetch();
@@ -93,12 +93,12 @@ export default function TeamPage() {
 
   const handleRemoveMember = async (memberId: string) => {
     if (!confirm('Remover este membro da equipe?')) return;
-    await removeMutation.execute({ memberId });
+    await removeMutation.mutate({ memberId });
     refetch();
   };
 
   const handleCancelInvite = async (invitationId: string) => {
-    await removeMutation.execute({ invitationId });
+    await removeMutation.mutate({ invitationId });
     refetch();
   };
 

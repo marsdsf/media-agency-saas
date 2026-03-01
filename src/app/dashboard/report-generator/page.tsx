@@ -71,8 +71,6 @@ export default function ReportGeneratorPage() {
         { id: '3', name: 'Restaurante ABC', logo: '🍽️', platforms: ['instagram', 'facebook'] },
         { id: '4', name: 'Tech Startup', logo: '🚀', platforms: ['linkedin', 'twitter'] },
       ];
-
-export default function ReportGeneratorPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');

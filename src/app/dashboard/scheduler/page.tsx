@@ -14,6 +14,7 @@ import {
   Facebook,
   Linkedin,
   Twitter,
+  Youtube,
   MoreVertical,
   Edit,
   Trash2,
@@ -44,6 +45,8 @@ const platformIcons: Record<Platform, React.ElementType> = {
   linkedin: Linkedin,
   twitter: Twitter,
   tiktok: Grid3X3,
+  youtube: Youtube,
+  pinterest: Grid3X3,
 };
 
 const platformColors: Record<Platform, string> = {
@@ -52,13 +55,18 @@ const platformColors: Record<Platform, string> = {
   linkedin: 'bg-white/20',
   twitter: 'bg-white/20',
   tiktok: 'bg-white/20',
+  youtube: 'bg-white/20',
+  pinterest: 'bg-white/20',
 };
 
-const statusConfig = {
-  draft: { label: 'Rascunho', variant: 'warning' as const },
-  scheduled: { label: 'Agendado', variant: 'info' as const },
-  published: { label: 'Publicado', variant: 'success' as const },
-  failed: { label: 'Falhou', variant: 'danger' as const },
+const statusConfig: Record<string, { label: string; variant: string }> = {
+  draft: { label: 'Rascunho', variant: 'warning' },
+  scheduled: { label: 'Agendado', variant: 'info' },
+  published: { label: 'Publicado', variant: 'success' },
+  failed: { label: 'Falhou', variant: 'danger' },
+  rejected: { label: 'Rejeitado', variant: 'danger' },
+  approved: { label: 'Aprovado', variant: 'success' },
+  pending_approval: { label: 'Pendente', variant: 'warning' },
 };
 
 export default function SchedulerPage() {
@@ -365,8 +373,8 @@ function PostListItem({
                 </div>
               );
             })}
-            <Badge variant={statusConfig[post.status].variant}>
-              {statusConfig[post.status].label}
+            <Badge variant={statusConfig[post.status]?.variant as any}>
+              {statusConfig[post.status]?.label || post.status}
             </Badge>
             {post.campaign && (
               <Badge>{post.campaign}</Badge>

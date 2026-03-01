@@ -34,11 +34,11 @@ export default function ReportsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newReport, setNewReport] = useState({ name: '', clientId: '', type: 'weekly', period: '' });
 
-  const reportsList: any[] = reports || [];
+  const reportsList: any[] = (reports as any)?.reports || (Array.isArray(reports) ? reports : []);
 
   const handleCreateReport = async () => {
     if (!newReport.name || !newReport.clientId) return;
-    await createMutation.execute({
+    await createMutation.mutate({
       name: newReport.name,
       client_id: newReport.clientId,
       type: newReport.type,
@@ -124,7 +124,6 @@ export default function ReportsPage() {
                   >
                     {report.status === 'ready' ? 'Pronto' :
                      report.status === 'generating' ? 'Gerando...' : report.status || 'Pronto'}
-                  </Badge>
                   </Badge>
                 </div>
               </div>
@@ -266,7 +265,7 @@ export default function ReportsPage() {
                   className="w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white"
                 >
                   <option value="">Selecione...</option>
-                  {(clients || []).map((c: any) => (
+                  {((clients as any)?.clients || (Array.isArray(clients) ? clients : [])).map((c: any) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>

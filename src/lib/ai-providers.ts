@@ -209,7 +209,7 @@ async function generateImageOpenAI(options: ImageGenerationOptions): Promise<AII
     style: options.style || 'vivid',
   });
 
-  const images = response.data.map((img) => ({
+  const images = (response.data || []).map((img) => ({
     url: img.url || '',
     revisedPrompt: img.revised_prompt,
   }));
