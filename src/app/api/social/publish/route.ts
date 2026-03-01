@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { useCredits } from '@/lib/credits';
+import { fullModeration, validateForPlatform } from '@/lib/content-moderation';
 
 // Publicar em qualquer plataforma social
 export async function POST(request: NextRequest) {
@@ -20,6 +21,19 @@ export async function POST(request: NextRequest) {
       hashtags,
       mediaType = 'IMAGE',
     } = await request.json();
+
+    // Moderação de conteúdo
+    const moderation = await fullModeration(content || '', { skipAI: false });
+    if (!moderation.approved) {
+      return NextResponse.json({
+        error: 'Conteúdo bloqueado pela moderação',
+        moderation: {
+          score: moderation.score,
+          flags: moderation.flags,
+          suggestions: moderation.suggestions,
+        },
+      }, { status: 422 });
+    }
 
     // Verificar créditos
     const creditResult = await useCredits(ctx.userId, 'publish_now', 'Publicação em rede social');

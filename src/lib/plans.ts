@@ -136,6 +136,8 @@ export const CREDIT_COSTS = {
   // Publicação
   schedule_post: 1,
   publish_now: 1,
+  batch_publish: 1,
+  content_moderation: 0,
   
   // Analytics
   generate_report: 20,

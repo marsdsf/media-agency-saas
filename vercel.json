@@ -2,11 +2,15 @@
   "crons": [
     {
       "path": "/api/cron/publish",
-      "schedule": "0 */12 * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/autopilot",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/retry",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

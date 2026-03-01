@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserContext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { moderateContent, validateForPlatform } from '@/lib/content-moderation';
 
 // Listar posts da agência
 export async function GET(request: NextRequest) {
@@ -71,6 +72,33 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
     const postData = await request.json();
+
+    // Moderação de conteúdo ao criar post
+    if (postData.content) {
+      const moderation = moderateContent(postData.content);
+      if (!moderation.approved) {
+        return NextResponse.json({
+          error: 'Conteúdo bloqueado pela moderação',
+          moderation: {
+            score: moderation.score,
+            flags: moderation.flags,
+            suggestions: moderation.suggestions,
+          },
+        }, { status: 422 });
+      }
+
+      // Validação por plataforma
+      if (postData.platform) {
+        const platformValidation = validateForPlatform(postData.content, postData.platform, postData.mediaUrls);
+        if (!platformValidation.valid) {
+          return NextResponse.json({
+            error: 'Conteúdo incompatível com a plataforma',
+            validationErrors: platformValidation.errors,
+            warnings: platformValidation.warnings,
+          }, { status: 422 });
+        }
+      }
+    }
 
     const { data: post, error } = await supabase
       .from('posts')
