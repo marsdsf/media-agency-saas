@@ -281,7 +281,7 @@ async function handleBatchQueue(
     .eq('agency_id', ctx.agencyId)
     .eq('is_active', true);
 
-  const accountMap = new Map((accounts || []).map((a: any) => [a.id, a]));
+  const accountMap = new Map<string, any>((accounts || []).map((a: any) => [a.id, a]));
 
   // 3. Process each post
   const results: {

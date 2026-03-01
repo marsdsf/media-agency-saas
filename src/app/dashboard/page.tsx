@@ -16,20 +16,26 @@ import {
   FileText,
   BarChart3,
   Zap,
-  Loader2
+  Loader2,
+  ShoppingBag,
+  Rocket,
+  Image,
+  Hash,
 } from 'lucide-react';
 import { Button, Card, Badge } from '@/lib/ui';
-import { usePostsStore } from '@/lib/store';
+import { usePostsStore, useAuthStore } from '@/lib/store';
 import { useClients, useProfile } from '@/hooks/useApiData';
 
 export default function DashboardPage() {
   const { posts, fetchPosts } = usePostsStore();
   const { data: clientsData, loading: clientsLoading } = useClients();
   const { data: profileData, loading: profileLoading } = useProfile();
+  const { user } = useAuthStore();
   const [isWelcome, setIsWelcome] = useState(false);
   const [selectedClient, setSelectedClient] = useState('all');
   const [showClientSelector, setShowClientSelector] = useState(false);
 
+  const isSolo = user?.account_type === 'solo';
   const clients = clientsData?.clients ?? [];
   const agency = profileData?.agency;
 
@@ -39,8 +45,12 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    fetchPosts(selectedClient === 'all' ? undefined : selectedClient);
-  }, [selectedClient, fetchPosts]);
+    if (!isSolo) {
+      fetchPosts(selectedClient === 'all' ? undefined : selectedClient);
+    } else {
+      fetchPosts();
+    }
+  }, [selectedClient, fetchPosts, isSolo]);
 
   const selectorClients = useMemo(() => [
     { id: 'all', name: 'Todos os Clientes', logo: '📊' },
@@ -63,10 +73,19 @@ export default function DashboardPage() {
     return new Date(p.updatedAt) >= weekAgo;
   });
 
-  const aiCreditsUsed = agency?.aiCreditsUsed ?? 0;
-  const aiCreditsLimit = agency?.aiCreditsLimit ?? 0;
+  const aiCreditsUsed = user?.credits ?? agency?.aiCreditsUsed ?? 0;
+  const aiCreditsLimit = user?.creditsLimit ?? agency?.aiCreditsLimit ?? 0;
 
-  const stats = selectedClient === 'all'
+  // Solo stats — focused on the individual user's content
+  const soloStats = [
+    { label: 'Posts Agendados', value: scheduledPosts.length, icon: Calendar, color: 'violet' },
+    { label: 'Publicados na Semana', value: publishedThisWeek.length, icon: CheckCircle, color: 'green' },
+    { label: 'Rascunhos', value: draftPosts.length, icon: FileText, color: 'yellow' },
+    { label: 'Créditos IA', value: `${aiCreditsUsed}/${aiCreditsLimit}`, icon: Zap, color: 'blue' },
+  ];
+
+  // Agency stats
+  const agencyStats = selectedClient === 'all'
     ? [
         { label: 'Clientes Ativos', value: clients.length, icon: Building2, color: 'violet' },
         { label: 'Posts Este Mês', value: posts.length, icon: FileText, color: 'blue' },
@@ -80,6 +99,8 @@ export default function DashboardPage() {
         { label: 'Pendentes', value: pendingPosts.length, icon: TrendingUp, color: 'blue' },
       ];
 
+  const stats = isSolo ? soloStats : agencyStats;
+
   const colorClasses = {
     violet: 'bg-violet-500/10 text-violet-400',
     blue: 'bg-blue-500/10 text-blue-400',
@@ -92,7 +113,7 @@ export default function DashboardPage() {
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 5);
 
-  const isLoading = clientsLoading || profileLoading;
+  const isLoading = (!isSolo && clientsLoading) || profileLoading;
 
   if (isLoading) {
     return (
@@ -104,8 +125,37 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Welcome Banner */}
-      {(isWelcome || clients.length === 0) && (
+      {/* Welcome Banner — Solo */}
+      {isSolo && isWelcome && (
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-violet-600/20 to-purple-600/10 border border-violet-500/20">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-violet-600">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-white mb-1">Bem-vindo ao MediaAI! 🚀</h2>
+              <p className="text-gray-400 mb-4">Sua conta está pronta. Comece a criar conteúdo com IA:</p>
+              <div className="grid md:grid-cols-3 gap-3">
+                <Link href="/dashboard/products" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <ShoppingBag className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Cadastrar produtos</span>
+                </Link>
+                <Link href="/dashboard/ai-studio" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <Sparkles className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Gerar conteúdo com IA</span>
+                </Link>
+                <Link href="/dashboard/autopilot" className="flex items-center gap-2 p-3 rounded-xl bg-[#111] border border-[#1a1a1a] hover:border-violet-500/30 transition-all">
+                  <Rocket className="w-5 h-5 text-violet-400" />
+                  <span className="text-sm text-white">Ativar Autopilot</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Welcome Banner — Agency */}
+      {!isSolo && (isWelcome || clients.length === 0) && (
         <div className="p-6 rounded-2xl bg-gradient-to-r from-violet-600/20 to-purple-600/10 border border-violet-500/20">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-xl bg-violet-600">
@@ -133,7 +183,32 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Header with Client Selector */}
+      {/* Header — Solo Mode */}
+      {isSolo && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Olá, {user?.name || 'Empreendedor'}! 👋</h1>
+            <p className="text-gray-400 text-sm">Gerencie seu conteúdo e redes sociais</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-[#111] border border-[#1a1a1a]">
+              <Zap className="w-4 h-4 text-violet-400" />
+              <div className="text-sm">
+                <span className="text-white font-medium">{aiCreditsUsed.toLocaleString()}</span>
+                <span className="text-gray-500">/{aiCreditsLimit.toLocaleString()} créditos</span>
+              </div>
+            </div>
+            <Link href="/dashboard/ai-studio">
+              <Button leftIcon={<Sparkles className="w-4 h-4" />}>
+                Criar com IA
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Header — Agency Mode with Client Selector */}
+      {!isSolo && (
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* Client Selector */}
@@ -211,6 +286,7 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -229,8 +305,120 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Quick Actions — Solo */}
+      {isSolo && (
+        <div className="grid md:grid-cols-4 gap-4">
+          <Link href="/dashboard/products">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-violet-500/10">
+                  <ShoppingBag className="w-5 h-5 text-violet-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Produtos</h3>
+                  <p className="text-xs text-gray-500">Gerenciar catálogo</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/ai-studio">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-500/10">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">AI Studio</h3>
+                  <p className="text-xs text-gray-500">Criar conteúdo</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/calendar">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-blue-500/10">
+                  <Calendar className="w-5 h-5 text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Calendário</h3>
+                  <p className="text-xs text-gray-500">Ver agenda</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/autopilot">
+            <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-green-500/10">
+                  <Rocket className="w-5 h-5 text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">Autopilot</h3>
+                  <p className="text-xs text-gray-500">Postagem automática</p>
+                </div>
+              </div>
+            </Card>
+          </Link>
+        </div>
+      )}
+
+      {/* Upcoming Posts — Solo */}
+      {isSolo && (
+        <Card>
+          <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Próximos Posts</h2>
+            <Link href="/dashboard/calendar">
+              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                Ver calendário
+              </Button>
+            </Link>
+          </div>
+          <div className="divide-y divide-[#1a1a1a]">
+            {upcomingPosts.length === 0 ? (
+              <div className="p-8 text-center">
+                <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-2">Nenhum post agendado</p>
+                <p className="text-gray-500 text-sm mb-4">Use o AI Studio para criar seu primeiro conteúdo</p>
+                <Link href="/dashboard/ai-studio">
+                  <Button leftIcon={<Sparkles className="w-4 h-4" />}>
+                    Criar com IA
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              upcomingPosts.map((post) => (
+                <div key={post.id} className="p-4 hover:bg-white/5 transition-colors">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white line-clamp-2">{post.content}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {post.platforms.map((platform) => (
+                          <Badge key={platform} variant="info">{platform}</Badge>
+                        ))}
+                        <span className="text-xs text-gray-500">
+                          {new Date(post.scheduledAt).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Quick Actions for Agency View */}
-      {selectedClient === 'all' && (
+      {!isSolo && selectedClient === 'all' && (
         <div className="grid md:grid-cols-4 gap-4">
           <Link href="/dashboard/clients">
             <Card className="p-5 hover:border-violet-500/30 transition-all cursor-pointer group">
@@ -290,8 +478,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pending Approvals */}
-      {selectedClient === 'all' && pendingPosts.length > 0 && (
+      {/* Pending Approvals — Agency only */}
+      {!isSolo && selectedClient === 'all' && pendingPosts.length > 0 && (
         <Card>
           <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -328,8 +516,8 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Quick Actions for Client View */}
-      {selectedClient !== 'all' && (
+      {/* Quick Actions for Client View — Agency only */}
+      {!isSolo && selectedClient !== 'all' && (
         <div className="grid md:grid-cols-3 gap-4">
           <Link href="/dashboard/scheduler">
             <Card className="p-6 hover:border-violet-500/30 transition-all cursor-pointer group">
@@ -378,8 +566,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Upcoming Posts */}
-      {selectedClient !== 'all' && (
+      {/* Upcoming Posts — Agency Client View */}
+      {!isSolo && selectedClient !== 'all' && (
         <Card>
           <div className="p-6 border-b border-[#1a1a1a] flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">Próximos Posts</h2>

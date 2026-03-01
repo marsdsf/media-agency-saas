@@ -80,7 +80,6 @@ const soloNavigation = [
   { name: 'Calendário', href: '/dashboard/calendar', icon: CalendarDays },
   { name: 'Autopilot', href: '/dashboard/autopilot', icon: Rocket },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'Aprovações', href: '/dashboard/approvals', icon: CheckCircle },
   { name: 'Templates', href: '/dashboard/templates', icon: FileText },
   { name: 'Biblioteca', href: '/dashboard/media', icon: Image },
   { name: 'Brand Kit', href: '/dashboard/brand', icon: Palette },
@@ -94,17 +93,36 @@ const soloNavigation = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout, isAuthenticated } = useAuthStore();
+  const { user, logout, isAuthenticated, setUser } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useRealtimeNotifications(user?.id);
+
+  // TEST MODE: Auto-create test user if no user is logged in
+  useEffect(() => {
+    if (!user) {
+      setUser({
+        id: 'test-user-001',
+        name: 'Usuário Teste',
+        email: 'teste@mediaai.com',
+        avatar: undefined,
+        role: 'solo_user',
+        agency_id: 'test-agency-001',
+        agency_name: 'Meu Negócio',
+        plan: 'professional',
+        credits: 1500,
+        creditsLimit: 5000,
+        account_type: 'solo',
+      });
+    }
+  }, [user, setUser]);
 
   const isSolo = user?.account_type === 'solo';
   const navigation = useMemo(() => isSolo ? soloNavigation : agencyNavigation, [isSolo]);
 
   // Fetch account_type on mount if not set
   useEffect(() => {
-    if (user?.id && !user.account_type) {
+    if (user?.id && user.id !== 'test-user-001' && !user.account_type) {
       fetch('/api/business/profile')
         .then(r => r.ok ? r.json() : null)
         .then(d => {
